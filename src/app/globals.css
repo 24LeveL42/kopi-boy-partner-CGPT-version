@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   KOPI BOY — Design tokens
+   Derived from the approved brand direction: dark navy app background,
+   white surfaces, purple to green "KB" gradient mark, community/neighbourhood
+   tone. Reference these variables (never re-hardcode hex) so the palette
+   can be retuned from one place, per the "data-driven, not hard-coded"
+   architecture principle in the handover doc.
+   ========================================================================== */
+
+:root {
+  /* Brand gradient (logomark, primary CTAs, active states) */
+  --kb-purple: #7B3FE4;
+  --kb-purple-deep: #5B21B6;
+  --kb-green: #10B981;
+  --kb-green-deep: #047857;
+
+  /* Surfaces */
+  --kb-navy: #0B1B34;        /* app background */
+  --kb-navy-raised: #12274A; /* cards/panels on navy */
+  --kb-navy-line: #1F3A63;   /* hairline borders on navy */
+  --kb-white: #FFFFFF;
+  --kb-cream: #F6F5F2;
+
+  /* Text */
+  --kb-ink: #0B1B34;
+  --kb-ink-soft: #5B6B85;
+  --kb-on-navy: #EAF0FB;
+  --kb-on-navy-soft: #93A6C7;
+
+  /* Semantic */
+  --kb-warn: #F59E0B;
+  --kb-danger: #EF4444;
+
+  /* Height of the global Home/Back bar (AppChrome). Pages use `min-h-page`
+     instead of `min-h-screen` so bar + page still fit one viewport. */
+  --app-bar-h: 3rem;
+
+  /* Category tile colors (customer marketplace reference design) */
+  --kb-cat-homecook-bg: #EDE3FB;
+  --kb-cat-homecook-fg: #7C3AED;
+  --kb-cat-hawker-bg: #D7F5E7;
+  --kb-cat-hawker-fg: #0E9166;
+  --kb-cat-bakery-bg: #FBE3CE;
+  --kb-cat-bakery-fg: #C2540E;
+  --kb-cat-bulkorders-bg: #D6ECFB;
+  --kb-cat-bulkorders-fg: #1E6FC2;
+  --kb-cat-drinks-bg: #D3F1F7;
+  --kb-cat-drinks-fg: #0E7C99;
+
+  /* System stacks only (no remote font fetch at build time): a warm serif
+     for display headings to read "neighbourhood/community", a clean sans
+     for body/UI. */
+  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  --font-body: -apple-system, "Segoe UI", Roboto, ui-sans-serif, system-ui, sans-serif;
+}
+
+@theme inline {
+  --color-kb-purple: var(--kb-purple);
+  --color-kb-purple-deep: var(--kb-purple-deep);
+  --color-kb-green: var(--kb-green);
+  --color-kb-green-deep: var(--kb-green-deep);
+  --color-kb-navy: var(--kb-navy);
+  --color-kb-navy-raised: var(--kb-navy-raised);
+  --color-kb-navy-line: var(--kb-navy-line);
+  --color-kb-white: var(--kb-white);
+  --color-kb-cream: var(--kb-cream);
+  --color-kb-ink: var(--kb-ink);
+  --color-kb-ink-soft: var(--kb-ink-soft);
+  --color-kb-on-navy: var(--kb-on-navy);
+  --color-kb-on-navy-soft: var(--kb-on-navy-soft);
+  --color-kb-warn: var(--kb-warn);
+  --color-kb-danger: var(--kb-danger);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+}
+
+@utility min-h-page {
+  min-height: calc(100dvh - var(--app-bar-h));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--kb-navy);
+  color: var(--kb-on-navy);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--kb-green);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.kb-gradient-text {
+  background: linear-gradient(90deg, var(--kb-purple) 0%, var(--kb-green) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.kb-input {
+  width: 100%;
+  border-radius: 1rem;
+  background: white;
+  padding: 0.75rem 1rem;
+  font-size: 14px;
+  color: var(--kb-ink);
+  outline: none;
+}
