@@ -6,13 +6,11 @@ interface LogoProps {
   className?: string;
 }
 
-/**
- * KB logomark — the real approved artwork (public/brand/logo-icon.png,
- * background removed, cropped from the source file). Do not redraw this
- * as SVG; if the asset changes, replace the PNG in public/brand instead.
- */
-export function Logo({ size = 40, showWordmark = true, className = "" }: LogoProps) {
-  // Source crop is 427x367 (not square) — preserve that aspect ratio.
+export function Logo({
+  size = 40,
+  showWordmark = true,
+  className = "",
+}: LogoProps) {
   const height = size;
   const width = Math.round(size * (427 / 367));
 
@@ -26,6 +24,7 @@ export function Logo({ size = 40, showWordmark = true, className = "" }: LogoPro
         style={{ height, width: "auto" }}
         priority
       />
+
       {showWordmark && (
         <span
           className="font-display font-semibold tracking-tight leading-none"
