@@ -21,7 +21,7 @@ export interface ThreadChatConfig {
   /** Immutable chat table (select + insert only). */
   table: "messages" | "pickup_messages" | "partner_rider_messages";
   /** Column on `table` that ties a row to its thread. */
-  threadColumn: "order_id" | "pickup_request_id";
+  threadColumn: "order_id" | "pickup_request_id" | "delivery_request_id";
   /** Private bucket; object keys are `<threadId>/<uploader>/<random>.<ext>`. */
   bucket: string;
   title: string;
