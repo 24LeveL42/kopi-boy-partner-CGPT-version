@@ -163,14 +163,19 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Current order summary">
+        <Metric label="Needs attention" value={newOrders.length + awaitingPayment.length} tone="purple" />
+        <Metric label="Preparing" value={inKitchen.filter((o) => o.preparation_status === "preparing").length} tone="teal" />
+        <Metric label="Ready" value={inKitchen.filter((o) => o.preparation_status === "ready").length} tone="neutral" />
+      </div>
       {error && (
-        <p className="rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(239,68,68,0.15)", color: "#FCA5A5" }}>
+        <p className="rounded-xl px-3 py-2 text-xs" style={{ background: "#FEF0F0", color: "#B42318" }}>
           {error}
         </p>
       )}
 
       <section>
-        <h3 className="text-xs font-semibold uppercase" style={{ color: "var(--kb-on-navy-soft)" }}>
+        <h3 className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-ink-soft)" }}>
           New orders
         </h3>
         {newOrders.length === 0 ? (
@@ -180,7 +185,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
         ) : (
           <div className="mt-2 space-y-2">
             {newOrders.map((o) => (
-              <div key={o.id} className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
+              <div key={o.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold">Order #{shortId(o.id)}</p>
                   <p className="text-sm font-semibold">${o.subtotal.toFixed(2)}</p>
@@ -211,7 +216,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase" style={{ color: "var(--kb-on-navy-soft)" }}>
+        <h3 className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-ink-soft)" }}>
           Awaiting PayNow
         </h3>
         {awaitingPayment.length === 0 ? (
@@ -221,7 +226,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
         ) : (
           <div className="mt-2 space-y-2">
             {awaitingPayment.map((o) => (
-              <div key={o.id} className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
+              <div key={o.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold">Order #{shortId(o.id)}</p>
                   <p className="text-sm font-semibold">${o.subtotal.toFixed(2)}</p>
@@ -242,7 +247,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold uppercase" style={{ color: "var(--kb-on-navy-soft)" }}>
+        <h3 className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-ink-soft)" }}>
           In the kitchen
         </h3>
         {inKitchen.length === 0 ? (
@@ -252,7 +257,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
         ) : (
           <div className="mt-2 space-y-2">
             {inKitchen.map((o) => (
-              <div key={o.id} className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
+              <div key={o.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold">Order #{shortId(o.id)}</p>
                   <p className="text-sm font-semibold">${o.subtotal.toFixed(2)}</p>
@@ -302,7 +307,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                                 <div className="flex items-center gap-2">
                                   <p className="truncate text-sm font-bold">{rider?.full_name ?? "Rider assigned"}</p>
                                   <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase" style={{ background: "#D7F5E7", color: "var(--kb-green-deep)" }}>
-                                    On the way
+                                    Rider assigned
                                   </span>
                                 </div>
                                 {rider?.phone && <p className="mt-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>📱 {rider.phone}</p>}
@@ -362,10 +367,15 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
         onClick={refresh}
         disabled={busy}
         className="w-full rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-60"
-        style={{ background: "var(--kb-navy-raised)", color: "var(--kb-on-navy)" }}
+        style={{ background: "#F1EDFA", color: "var(--kb-purple)" }}
       >
         <PendingLabel pending={isRunning("refresh")} pendingText="Refreshing…">Refresh</PendingLabel>
       </button>
     </div>
   );
+}
+
+function Metric({ label, value, tone }: { label: string; value: number; tone: "purple" | "teal" | "neutral" }) {
+  const colors = tone === "purple" ? ["#F1EDFA", "var(--kb-purple)"] : tone === "teal" ? ["#E5F7EF", "var(--kb-green-deep)"] : ["#F5F4F7", "var(--kb-ink)"];
+  return <div className="rounded-2xl border border-[#eceaf1] p-3 sm:p-4" style={{ background: colors[0] }}><span className="block text-xl font-bold sm:text-2xl" style={{ color: colors[1] }}>{value}</span><span className="mt-1 block text-[10px] font-semibold leading-tight sm:text-xs" style={{ color: "var(--kb-ink-soft)" }}>{label}</span></div>;
 }

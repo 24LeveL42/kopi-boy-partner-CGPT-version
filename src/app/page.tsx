@@ -84,9 +84,11 @@ export default async function Home() {
         <PartnerShell
           userId={user.id}
           defaultView={screen.view}
+          partnerName={profile?.full_name ?? null}
+          businessName={screen.view === "cook" ? kitchen?.business_name ?? null : null}
           riderProfile={
-            screen.view === "rider" && profile
-              ? { fullName: profile.full_name, phone: profile.phone, photoUrl: profile.photo_url }
+            screen.view === "rider"
+              ? { fullName: profile?.full_name ?? null, phone: profile?.phone ?? null, photoUrl: profile?.photo_url ?? null }
               : undefined
           }
         />

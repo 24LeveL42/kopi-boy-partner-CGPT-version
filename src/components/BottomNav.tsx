@@ -8,7 +8,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-md items-stretch justify-between rounded-t-3xl bg-white px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(0,0,0,0.15)] sm:max-w-lg"
+      className="fixed inset-x-3 bottom-3 z-10 mx-auto flex max-w-xl items-stretch justify-between rounded-2xl border border-[#eceaf1] bg-white px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 shadow-[0_10px_32px_rgba(34,22,56,0.14)]"
       aria-label="Primary"
     >
       <Link

@@ -49,6 +49,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
   const supabase = createClient();
   const [openRequests, setOpenRequests] = useState<DeliveryRequestWithKitchen[]>([]);
   const [myDelivery, setMyDelivery] = useState<DeliveryRequestWithKitchen | null>(null);
+  const [completedToday, setCompletedToday] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { busy, isRunning, run } = usePendingAction();
@@ -79,6 +80,16 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       setLoading(false);
       return;
     }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const { count } = await supabase
+      .from("delivery_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("rider_id", riderId)
+      .eq("status", "completed")
+      .gte("completed_at", startOfDay.toISOString());
+    setCompletedToday(count ?? 0);
 
     if (mine) {
       // The exact address/postal code/coordinates are private; the DB hands
@@ -210,17 +221,26 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
   return (
     <div>
       {error && (
-        <p className="mb-3 rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(239,68,68,0.15)", color: "#FCA5A5" }}>
+        <p className="mb-3 rounded-xl px-3 py-2 text-xs" style={{ background: "#FEF0F0", color: "#B42318" }}>
           {error}
         </p>
       )}
 
+      <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3" aria-label="Today's delivery summary">
+        <RiderMetric label="Active delivery" value={myDelivery ? 1 : 0} tone="purple" />
+        <RiderMetric label="Available" value={openRequests.length} tone="teal" />
+        <RiderMetric label="Completed today" value={completedToday} tone="neutral" />
+      </div>
+
       {myDelivery ? (
-        <div className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
+        <div className="partner-order-card rounded-2xl bg-white p-4 sm:p-5" style={{ color: "var(--kb-ink)" }}>
           <p className="text-xs font-medium uppercase" style={{ color: "var(--kb-purple)" }}>
             Your active delivery
           </p>
-          <p className="mt-1 text-sm font-semibold">{myDelivery.kitchen_business_name}</p>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <p className="text-base font-bold">{myDelivery.kitchen_business_name}</p>
+            <span className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide" style={{ background: "#E5F7EF", color: "var(--kb-green-deep)" }}>In progress</span>
+          </div>
           <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{myDelivery.kitchen_address}</p>
           {myDelivery.kitchen_maps_url && (
             <a
@@ -234,8 +254,8 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
             </a>
           )}
           <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>Order #{shortId(myDelivery.order_id)}</p>
-          <p className="mt-2 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-            Collect from the cook and agree the delivery fee directly with them.
+          <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ color: "var(--kb-ink-soft)", background: "#F7F6FA" }}>
+            Collect from the cook and coordinate the customer handoff with them. Agree the delivery fee directly with the cook.
           </p>
           {proofOpen ? (
             <div className="mt-3 rounded-2xl p-3" style={{ background: "var(--kb-cream)" }}>
@@ -288,7 +308,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
                 onClick={markDelivered}
                 disabled={!proofPhoto || busy}
                 className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "var(--kb-green-deep)" }}
+                style={{ background: "linear-gradient(110deg,var(--kb-purple),#6940D7)" }}
               >
                 <PendingLabel pending={isRunning(`${myDelivery.id}:deliver`)} pendingText="Confirming delivery…">
                   {proofPhoto ? "Confirm delivered" : "Attach a photo to confirm"}
@@ -311,7 +331,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
                 setProofOpen(true);
               }}
               className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold text-white"
-              style={{ background: "var(--kb-green-deep)" }}
+              style={{ background: "linear-gradient(110deg,var(--kb-purple),#6940D7)" }}
             >
               Mark delivered
             </button>
@@ -349,7 +369,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
           ) : (
             <div className="space-y-2">
               {openRequests.map((r) => (
-                <div key={r.id} className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
+                  <div key={r.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
                   <p className="text-sm font-semibold">{r.kitchen_business_name}</p>
                   <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{r.kitchen_address}</p>
                   <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>Order #{shortId(r.order_id)}</p>
@@ -378,4 +398,9 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       )}
     </div>
   );
+}
+
+function RiderMetric({ label, value, tone }: { label: string; value: number; tone: "purple" | "teal" | "neutral" }) {
+  const colors = tone === "purple" ? ["#F1EDFA", "var(--kb-purple)"] : tone === "teal" ? ["#E5F7EF", "var(--kb-green-deep)"] : ["#F5F4F7", "var(--kb-ink)"];
+  return <div className="rounded-2xl border border-[#eceaf1] p-3 sm:p-4" style={{ background: colors[0] }}><span className="block text-xl font-bold sm:text-2xl" style={{ color: colors[1] }}>{value}</span><span className="mt-1 block text-[10px] font-semibold leading-tight sm:text-xs" style={{ color: "var(--kb-ink-soft)" }}>{label}</span></div>;
 }

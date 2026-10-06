@@ -128,3 +128,54 @@ body {
   color: var(--kb-ink);
   outline: none;
 }
+
+/* The live cook/rider workspace uses a light, premium surface system while
+   the application, picker, and setup flows keep their existing dark canvas. */
+.partner-dashboard {
+  --kb-navy: #f5f6fa;
+  --kb-navy-raised: #f1edfa;
+  --kb-navy-line: #e5e0ef;
+  --kb-on-navy: #211735;
+  --kb-on-navy-soft: #6f6880;
+  background: #f5f6fa;
+  color: #211735;
+}
+
+.partner-dashboard .partner-surface {
+  background: #fff;
+  border: 1px solid #eceaf1;
+  box-shadow: 0 8px 24px rgba(34, 22, 56, 0.055);
+}
+
+.partner-dashboard .partner-primary {
+  background: linear-gradient(110deg, var(--kb-purple) 0%, #6940d7 55%, #8056e9 100%);
+  color: white;
+  box-shadow: 0 5px 12px rgba(98, 54, 190, 0.2);
+  transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease;
+}
+
+.partner-dashboard .partner-primary:hover:not(:disabled) {
+  filter: brightness(1.04);
+  box-shadow: 0 8px 16px rgba(98, 54, 190, 0.25);
+}
+
+.partner-dashboard .partner-primary:active:not(:disabled) { transform: scale(0.985); }
+
+.partner-dashboard .partner-order-card {
+  border: 1px solid #eceaf1;
+  box-shadow: 0 5px 16px rgba(34, 22, 56, 0.045);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+
+.partner-dashboard .partner-order-card:hover {
+  box-shadow: 0 9px 24px rgba(34, 22, 56, 0.085);
+}
+
+.partner-dashboard button,
+.partner-dashboard a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.partner-dashboard button:disabled {
+  cursor: not-allowed;
+}
