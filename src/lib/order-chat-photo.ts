@@ -16,9 +16,28 @@ export const ORDER_CHAT_PHOTO_URL_TTL_SECONDS = 60 * 60;
 
 export const MESSAGE_BODY_MAX_LENGTH = 2000;
 
+const ORDER_CHAT_PHOTO_EXT_TYPES: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+};
+
+/**
+ * The file's MIME type, inferred from its extension when the browser left it
+ * blank (common for phone photos, especially HEIC). Empty if unknown.
+ */
+export function orderChatPhotoType(file: { type: string; name?: string }): string {
+  if (file.type) return file.type;
+  const ext = /\.([a-z0-9]{1,5})$/i.exec(file.name ?? "")?.[1]?.toLowerCase();
+  return (ext && ORDER_CHAT_PHOTO_EXT_TYPES[ext]) || "";
+}
+
 /** Returns why a picked file can't be attached, or null if it's fine. */
-export function validateOrderChatPhoto(file: { type: string; size: number }): string | null {
-  if (!ORDER_CHAT_PHOTO_TYPES.includes(file.type)) return "Please choose a JPEG, PNG, WebP or HEIC photo.";
+export function validateOrderChatPhoto(file: { type: string; size: number; name?: string }): string | null {
+  if (!ORDER_CHAT_PHOTO_TYPES.includes(orderChatPhotoType(file))) return "Please choose a JPEG, PNG, WebP or HEIC photo.";
   if (file.size > ORDER_CHAT_PHOTO_MAX_BYTES) return "That photo is over 5 MB — please choose a smaller one.";
   return null;
 }
@@ -35,8 +54,8 @@ export function orderChatPhotoPath(threadId: string, userId: string, fileName: s
 
 /**
  * Uploads a picked (already validated) photo under this thread/user's folder
- * of `bucket` and returns its object key, or null if the upload failed. Every
- * call gets a fresh key, so nothing is ever overwritten.
+ * of `bucket` and returns its object key, or the storage error message if the
+ * upload failed. Every call gets a fresh key, so nothing is ever overwritten.
  */
 export async function uploadChatPhoto(
   supabase: SupabaseClient,
@@ -44,14 +63,22 @@ export async function uploadChatPhoto(
   threadId: string,
   userId: string,
   file: File
-): Promise<string | null> {
+): Promise<{ path: string; error: null } | { path: null; error: string }> {
   const path = orderChatPhotoPath(threadId, userId, file.name, crypto.randomUUID());
-  const { error } = await supabase.storage.from(bucket).upload(path, file, { contentType: file.type, upsert: false });
-  return error ? null : path;
+  const contentType = orderChatPhotoType(file) || undefined;
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { contentType, upsert: false });
+  return error ? { path: null, error: error.message || "Unknown storage error" } : { path, error: null };
 }
 
-export function uploadOrderChatPhoto(supabase: SupabaseClient, orderId: string, userId: string, file: File) {
-  return uploadChatPhoto(supabase, ORDER_CHAT_PHOTO_BUCKET, orderId, userId, file);
+/** Object key of the uploaded photo, or null if the upload failed. */
+export async function uploadOrderChatPhoto(
+  supabase: SupabaseClient,
+  orderId: string,
+  userId: string,
+  file: File
+): Promise<string | null> {
+  const { path } = await uploadChatPhoto(supabase, ORDER_CHAT_PHOTO_BUCKET, orderId, userId, file);
+  return path;
 }
 
 /** Trimmed body, or null when there's nothing sendable (text or a photo is required). */

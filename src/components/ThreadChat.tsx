@@ -141,11 +141,12 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
 
       let photoPath: string | null = null;
       if (photo) {
-        photoPath = await uploadChatPhoto(supabase, bucket, threadId, userId, photo);
-        if (!photoPath) {
-          setError("Photo couldn't be uploaded — please try again.");
+        const upload = await uploadChatPhoto(supabase, bucket, threadId, userId, photo);
+        if (upload.error !== null) {
+          setError(`Photo couldn't be uploaded: ${upload.error}`);
           return;
         }
+        photoPath = upload.path;
       }
 
       const { error: sendError } = await supabase
