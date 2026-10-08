@@ -9,6 +9,7 @@ const PARTNER_CHAT: ThreadChatConfig = {
   otherLabel: "Rider",
   emptyText: "No messages yet — coordinate the pickup with your rider.",
   placeholder: "Message the rider…",
+  allowPhotos: false,
 };
 
 export function PartnerRiderChat({ deliveryRequestId, userId }: { deliveryRequestId: string; userId: string }) {

@@ -29,6 +29,8 @@ export interface ThreadChatConfig {
   otherLabel: string;
   emptyText: string;
   placeholder: string;
+  /** Whether photos can be attached and shown. Defaults to true; false makes the chat text only. */
+  allowPhotos?: boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export interface ThreadChatConfig {
  */
 export function ThreadChat({ config, threadId, userId }: { config: ThreadChatConfig; threadId: string; userId: string }) {
   const { table, threadColumn, bucket } = config;
+  const allowPhotos = config.allowPhotos ?? true;
   const [supabase] = useState(() => createClient());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
@@ -96,6 +99,7 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
 
   // Sign any photo keys we haven't signed yet, in one batch per change.
   useEffect(() => {
+    if (!allowPhotos) return;
     const missing = messages
       .map((m) => m.photo_path)
       .filter((p): p is string => Boolean(p) && !requestedPathsRef.current.has(p!));
@@ -114,7 +118,7 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
     return () => {
       cancelled = true;
     };
-  }, [supabase, bucket, messages]);
+  }, [supabase, bucket, messages, allowPhotos]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -134,14 +138,15 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
   }
 
   function send() {
-    const body = normalizeOrderChatBody(draft, photo !== null);
+    const attached = allowPhotos ? photo : null;
+    const body = normalizeOrderChatBody(draft, attached !== null);
     if (body === null || sending) return;
     run("send", async () => {
       setError(null);
 
       let photoPath: string | null = null;
-      if (photo) {
-        const upload = await uploadChatPhoto(supabase, bucket, threadId, userId, photo);
+      if (attached) {
+        const upload = await uploadChatPhoto(supabase, bucket, threadId, userId, attached);
         if (upload.error !== null) {
           setError(`Photo couldn't be uploaded: ${upload.error}`);
           return;
@@ -149,9 +154,9 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
         photoPath = upload.path;
       }
 
-      const { error: sendError } = await supabase
-        .from(table)
-        .insert({ [threadColumn]: threadId, sender_id: userId, body, photo_path: photoPath });
+      const row: Record<string, string | null> = { [threadColumn]: threadId, sender_id: userId, body };
+      if (allowPhotos) row.photo_path = photoPath;
+      const { error: sendError } = await supabase.from(table).insert(row);
       if (sendError) {
         setError(sendError.message);
         return;
@@ -161,7 +166,7 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
     });
   }
 
-  const canSend = !sending && normalizeOrderChatBody(draft, photo !== null) !== null;
+  const canSend = !sending && normalizeOrderChatBody(draft, allowPhotos && photo !== null) !== null;
 
   return (
     <div className="mt-3 rounded-2xl border bg-white p-3 shadow-[0_5px_16px_rgba(34,22,56,0.045)]" style={{ color: "var(--kb-ink)", borderColor: "var(--kb-line)" }}>
@@ -193,7 +198,8 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
                       : { background: "#F5F3FA", color: "var(--kb-ink)" }
                   }
                 >
-                  {m.photo_path &&
+                  {allowPhotos &&
+                    m.photo_path &&
                     (url ? (
                       <a href={url} target="_blank" rel="noopener noreferrer">
                         {/* Short-lived signed URL from a private bucket — next/image can't (and shouldn't) cache it. */}
@@ -217,7 +223,7 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
         </p>
       )}
 
-      {photo && (
+      {allowPhotos && photo && (
         <div
           className="mt-2 flex items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-xs"
           style={{ background: "var(--kb-tint)" }}
@@ -236,24 +242,28 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
       )}
 
       <div className="mt-2 flex items-center gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ORDER_CHAT_PHOTO_TYPES.join(",")}
-          onChange={handlePhotoPicked}
-          className="hidden"
-          aria-label="Attach photo"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={sending}
-          aria-label="Attach a photo"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl disabled:opacity-60"
-          style={{ background: "var(--kb-tint)", color: "var(--kb-purple)" }}
-        >
-          <CameraIcon />
-        </button>
+        {allowPhotos && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ORDER_CHAT_PHOTO_TYPES.join(",")}
+              onChange={handlePhotoPicked}
+              className="hidden"
+              aria-label="Attach photo"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending}
+              aria-label="Attach a photo"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl disabled:opacity-60"
+              style={{ background: "var(--kb-tint)", color: "var(--kb-purple)" }}
+            >
+              <CameraIcon />
+            </button>
+          </>
+        )}
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
