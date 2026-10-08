@@ -15,12 +15,17 @@ export default async function NotificationsPage() {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
 
   return (
-    <div className="mx-auto min-h-page max-w-md px-5 py-6 sm:max-w-lg" style={{ background: "var(--kb-navy)" }}>
-      <TopBar badge={profile?.role === "picker" ? "Picker" : "Partner"} />
-      <h1 className="mt-4 mb-4 font-display text-lg font-bold" style={{ color: "var(--kb-on-navy)" }}>
-        Notifications
-      </h1>
-      <NotificationsCenter role={profile?.role ?? "customer"} />
+    <div className="kb-page min-h-page">
+      <div className="relative mx-auto max-w-md px-4 pb-10 pt-3 sm:max-w-lg sm:px-6">
+        <TopBar badge={profile?.role === "picker" ? "Picker" : "Partner"} />
+        <div className="mb-5 mt-5">
+          <p className="kb-eyebrow">Kopi Boy · Partner</p>
+          <h1 className="mt-1 font-display text-2xl font-bold tracking-tight" style={{ color: "var(--kb-ink)" }}>
+            Notifications
+          </h1>
+        </div>
+        <NotificationsCenter role={profile?.role ?? "customer"} />
+      </div>
     </div>
   );
 }

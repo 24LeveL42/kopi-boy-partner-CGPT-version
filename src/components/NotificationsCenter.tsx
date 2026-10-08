@@ -23,7 +23,7 @@ function Switch({ checked, onChange, label, hint }: { checked: boolean; onChange
   return (
     <div className="flex items-center justify-between gap-3 py-2.5">
       <div>
-        <p className="text-sm font-medium">{label}</p>
+        <p className="text-sm font-semibold">{label}</p>
         {hint && (
           <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>
             {hint}
@@ -37,7 +37,7 @@ function Switch({ checked, onChange, label, hint }: { checked: boolean; onChange
         aria-label={label}
         onClick={() => onChange(!checked)}
         className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
-        style={{ background: checked ? "var(--kb-green)" : "#CBD5E1" }}
+        style={{ background: checked ? "var(--kb-gradient)" : "#DCD8E5" }}
       >
         <span
           className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
@@ -88,8 +88,9 @@ export function NotificationsCenter({ role }: { role: string }) {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-        <h2 className="text-sm font-semibold">Alerts on this device</h2>
+      <section className="kb-card p-5">
+        <p className="kb-eyebrow">Settings</p>
+        <h2 className="mt-1 font-display text-lg font-bold">Alerts on this device</h2>
         {PUSH_COPY[pushState] && (
           <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
             {PUSH_COPY[pushState]}
@@ -100,12 +101,7 @@ export function NotificationsCenter({ role }: { role: string }) {
             type="button"
             onClick={() => push.run("push", pushState === "off" ? turnOnPush : turnOffPush)}
             disabled={push.busy}
-            className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold disabled:opacity-60"
-            style={
-              pushState === "off"
-                ? { background: "linear-gradient(90deg, var(--kb-purple) 0%, var(--kb-green) 100%)", color: "white" }
-                : { background: "var(--kb-cream)", color: "var(--kb-ink)" }
-            }
+            className={`${pushState === "off" ? "kb-btn-primary" : "kb-btn-ghost"} mt-3 w-full py-3 text-sm`}
           >
             <PendingLabel pending={push.busy} pendingText={pushState === "off" ? "Turning on…" : "Turning off…"}>
               {pushState === "off" ? "Turn on notifications" : "Turn off notifications"}
@@ -120,12 +116,12 @@ export function NotificationsCenter({ role }: { role: string }) {
           </p>
         )}
         {pushError && (
-          <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(239,68,68,0.15)", color: "#B91C1C" }}>
+          <p className="kb-alert-error mt-2 rounded-xl px-3 py-2 text-xs">
             {pushError}
           </p>
         )}
 
-        <div className="mt-3 divide-y border-t" style={{ borderColor: "#E5E7EB" }}>
+        <div className="mt-3 divide-y divide-[#ECEAF1] border-t" style={{ borderColor: "var(--kb-line)" }}>
           {showDuty && (
             <Switch
               label="Available for requests"
@@ -157,18 +153,21 @@ export function NotificationsCenter({ role }: { role: string }) {
 
       <section>
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-base font-bold" style={{ color: "var(--kb-on-navy)" }}>
-            Inbox
-          </h2>
+          <div>
+            <p className="kb-eyebrow">Updates</p>
+            <h2 className="mt-1 font-display text-lg font-bold" style={{ color: "var(--kb-ink)" }}>
+              Inbox
+            </h2>
+          </div>
           {unreadCount > 0 && (
-            <button type="button" onClick={() => void markAllRead()} className="text-sm font-semibold" style={{ color: "var(--kb-green)" }}>
+            <button type="button" onClick={() => void markAllRead()} className="kb-btn-secondary px-3 py-2 text-xs">
               Mark all read
             </button>
           )}
         </div>
 
         {items.length === 0 ? (
-          <p className="mt-3 rounded-2xl bg-white p-4 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
+          <p className="kb-card mt-3 p-5 text-center text-sm" style={{ color: "var(--kb-ink-soft)" }}>
             Nothing yet — new orders, deliveries and updates will show up here.
           </p>
         ) : (
@@ -178,8 +177,8 @@ export function NotificationsCenter({ role }: { role: string }) {
                 <button
                   type="button"
                   onClick={() => open(n)}
-                  className="flex w-full items-start gap-3 rounded-2xl bg-white p-4 text-left"
-                  style={{ color: "var(--kb-ink)" }}
+                  className="flex w-full items-start gap-3 rounded-2xl border bg-white p-4 text-left shadow-[0_5px_16px_rgba(34,22,56,0.045)] transition hover:-translate-y-0.5 hover:shadow-md"
+                  style={{ color: "var(--kb-ink)", borderColor: n.read_at ? "var(--kb-line)" : "rgba(124,58,237,0.22)" }}
                 >
                   <span
                     aria-label={n.read_at ? "Read" : "Unread"}

@@ -20,8 +20,7 @@ export default function Error({ error, retry }: { error: Error & { digest?: stri
       <button
         type="button"
         onClick={() => retry()}
-        className="w-full rounded-2xl py-3.5 text-[15px] font-semibold text-white"
-        style={{ background: "linear-gradient(90deg, var(--kb-purple) 0%, var(--kb-green) 100%)" }}
+        className="kb-btn-primary w-full py-3.5 text-[15px]"
       >
         Try again
       </button>

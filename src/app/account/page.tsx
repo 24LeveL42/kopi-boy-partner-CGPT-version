@@ -32,9 +32,14 @@ export default async function AccountPage() {
     screen.kind === "partner-shell" && screen.view === "rider" ? "rider" : screen.kind === "picker-shell" ? "picker" : null;
 
   return (
-    <div className="min-h-page px-4 py-8 sm:px-6" style={{ background: "var(--kb-navy)", color: "var(--kb-on-navy)" }}>
-      <div className="mx-auto max-w-sm space-y-4">
-        <h1 className="font-display text-xl font-bold">Account</h1>
+    <div className="kb-page min-h-page px-4 py-8 sm:px-6">
+      <div className="relative mx-auto max-w-md space-y-4">
+        <div className="mb-2">
+          <p className="kb-eyebrow">Kopi Boy · Partner</p>
+          <h1 className="mt-1 font-display text-2xl font-bold tracking-tight" style={{ color: "var(--kb-ink)" }}>
+            Account
+          </h1>
+        </div>
         {profileRole && profile && (
           <PartnerProfileForm
             role={profileRole}
@@ -44,13 +49,16 @@ export default async function AccountPage() {
             photoUrl={profile.photo_url}
           />
         )}
-        <div className="rounded-2xl bg-white p-5 shadow-lg" style={{ color: "var(--kb-ink)" }}>
-          <p className="text-sm" style={{ color: "var(--kb-ink-soft)" }}>Signed in as</p>
-          <p className="mt-1 font-semibold">{user.email ?? user.phone}</p>
+        <div className="kb-card p-5">
+          <p className="kb-eyebrow">Signed in as</p>
+          <p className="mt-1.5 break-all text-[15px] font-bold">{user.email ?? user.phone}</p>
           {profile && (
-            <p className="mt-1 text-sm capitalize" style={{ color: "var(--kb-ink-soft)" }}>
+            <span
+              className="mt-3 inline-flex rounded-full px-3 py-1 text-xs font-bold capitalize"
+              style={{ background: "var(--kb-mint)", color: "var(--kb-green-deep)" }}
+            >
               Role: {profile.role}
-            </p>
+            </span>
           )}
           <div className="mt-5">
             <SignOutButton />

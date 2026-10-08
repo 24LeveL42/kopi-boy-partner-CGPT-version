@@ -299,12 +299,12 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
               void markRead(t.id);
               router.push(t.url);
             }}
-            className="pointer-events-auto rounded-2xl border px-4 py-3 text-left shadow-lg"
-            style={{ background: "var(--kb-navy-raised)", borderColor: "var(--kb-green)", color: "var(--kb-on-navy)" }}
+            className="pointer-events-auto rounded-2xl border border-l-4 bg-white px-4 py-3 text-left shadow-[0_12px_32px_rgba(30,20,60,0.14)]"
+            style={{ borderColor: "var(--kb-line)", borderLeftColor: "var(--kb-purple)", color: "var(--kb-ink)" }}
           >
             <span className="block text-sm font-semibold">{t.title}</span>
             {t.body && (
-              <span className="mt-0.5 block text-xs" style={{ color: "var(--kb-on-navy-soft)" }}>
+              <span className="mt-0.5 block text-xs" style={{ color: "var(--kb-ink-soft)" }}>
                 {t.body}
               </span>
             )}

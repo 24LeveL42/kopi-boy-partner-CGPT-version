@@ -62,12 +62,23 @@ export function RequestPickerForm({
       {openOrActive.length > 0 ? (
         <div className="space-y-2">
           {openOrActive.map((r) => (
-            <div key={r.id} className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-              <p className="text-sm font-semibold">{r.kitchen_business_name}</p>
-              <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{r.kitchen_address}</p>
-              <p className="mt-2 text-xs font-medium" style={{ color: r.status === "accepted" ? "var(--kb-green-deep)" : "var(--kb-warn)" }}>
-                {STATUS_LABEL[r.status]}
-              </p>
+            <div key={r.id} className="kb-card p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[15px] font-bold">{r.kitchen_business_name}</p>
+                  <p className="mt-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{r.kitchen_address}</p>
+                </div>
+                <span
+                  className="shrink-0 rounded-full px-3 py-1 text-[11px] font-bold"
+                  style={
+                    r.status === "accepted"
+                      ? { background: "var(--kb-mint)", color: "var(--kb-green-deep)" }
+                      : { background: "rgba(245,158,11,0.12)", color: "#B45309" }
+                  }
+                >
+                  {STATUS_LABEL[r.status]}
+                </span>
+              </div>
               {r.status === "accepted" && (
                 <>
                   <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
@@ -81,15 +92,14 @@ export function RequestPickerForm({
           ))}
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-          <label className="block text-xs font-medium" style={{ color: "var(--kb-ink-soft)" }}>
+        <form onSubmit={handleSubmit} className="kb-card-pop p-5">
+          <label className="block text-xs font-semibold" style={{ color: "var(--kb-ink-soft)" }}>
             Which kitchen is this pickup for?
           </label>
           <select
             value={kitchenId}
             onChange={(e) => setKitchenId(e.target.value)}
-            className="mt-1 w-full rounded-xl border px-3 py-2.5 text-sm"
-            style={{ borderColor: "#E5E7EB" }}
+            className="kb-input mt-1.5"
           >
             {kitchens.map((k) => (
               <option key={k.id} value={k.id}>
@@ -98,19 +108,18 @@ export function RequestPickerForm({
               </option>
             ))}
           </select>
-          <p className="mt-2 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+          <p className="mt-3 rounded-xl px-3 py-2 text-xs" style={{ background: "var(--kb-tint)", color: "var(--kb-ink-soft)" }}>
             Suggested fee $2.00, paid directly to the picker — not through Kopi Boy.
           </p>
           <button
             type="submit"
             disabled={loading || !kitchenId}
-            className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(90deg, var(--kb-purple) 0%, var(--kb-green) 100%)" }}
+            className="kb-btn-primary mt-4 w-full py-3.5 text-[15px]"
           >
             <PendingLabel pending={loading} pendingText="Requesting…">Request a picker</PendingLabel>
           </button>
           {error && (
-            <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(239,68,68,0.15)", color: "#B91C1C" }}>
+            <p className="kb-alert-error mt-3 rounded-xl px-3 py-2 text-xs">
               {error}
             </p>
           )}
@@ -118,7 +127,7 @@ export function RequestPickerForm({
       )}
 
       {myRequests.some((r) => r.status === "completed") && (
-        <p className="mt-4 text-xs" style={{ color: "var(--kb-on-navy-soft)" }}>
+        <p className="mt-4 text-center text-xs" style={{ color: "var(--kb-ink-soft)" }}>
           Your completed pickups are handled — continue the delivery as normal.
         </p>
       )}

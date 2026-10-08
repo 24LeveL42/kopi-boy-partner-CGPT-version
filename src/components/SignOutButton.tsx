@@ -48,8 +48,7 @@ export function SignOutButton({ onlyWhenSignedIn = false }: { onlyWhenSignedIn?:
       type="button"
       onClick={handleSignOut}
       disabled={busy}
-      className="w-full rounded-xl py-2.5 text-sm font-medium disabled:opacity-60"
-      style={{ background: "var(--kb-cream)", color: "var(--kb-ink)" }}
+      className="kb-btn-ghost w-full py-3 text-sm"
     >
       <PendingLabel pending={busy} pendingText="Signing out…">Sign out</PendingLabel>
     </button>

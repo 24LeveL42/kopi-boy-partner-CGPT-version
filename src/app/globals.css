@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   KOPI BOY — Design tokens
-   Derived from the approved brand direction: dark navy app background,
-   white surfaces, purple to green "KB" gradient mark, community/neighbourhood
-   tone. Reference these variables (never re-hardcode hex) so the palette
-   can be retuned from one place, per the "data-driven, not hard-coded"
-   architecture principle in the handover doc.
+   KOPI BOY — Design tokens ("Ferrari" partner look)
+   Light, premium canvas with white surfaces, soft purple shadows and the
+   purple to green "KB" gradient for primary actions. Reference these
+   variables (never re-hardcode hex) so the palette can be retuned from one
+   place, per the "data-driven, not hard-coded" architecture principle in
+   the handover doc.
    ========================================================================== */
 
 :root {
@@ -17,17 +17,31 @@
   --kb-green-deep: #047857;
 
   /* Surfaces */
-  --kb-navy: #0B1B34;        /* app background */
-  --kb-navy-raised: #12274A; /* cards/panels on navy */
-  --kb-navy-line: #1F3A63;   /* hairline borders on navy */
+  --kb-canvas: #F5F6FA;      /* app background */
+  --kb-surface: #FFFFFF;     /* cards/panels */
+  --kb-field: #FAFAFC;       /* input wells */
+  --kb-line: #ECEAF1;        /* hairline borders */
+  --kb-tint: #F1EDFA;        /* soft purple wash: chips, secondary buttons */
+  --kb-mint: #E5F7EF;        /* soft green wash: success, live badges */
   --kb-white: #FFFFFF;
   --kb-cream: #F6F5F2;
+
+  /* Legacy names from the old dark-navy canvas, now pointing at the light
+     surfaces above so any remaining reference renders in the new look. */
+  --kb-navy: var(--kb-canvas);
+  --kb-navy-raised: var(--kb-tint);
+  --kb-navy-line: #E5E0EF;
 
   /* Text */
   --kb-ink: #0B1B34;
   --kb-ink-soft: #5B6B85;
-  --kb-on-navy: #EAF0FB;
-  --kb-on-navy-soft: #93A6C7;
+  --kb-on-navy: #211735;
+  --kb-on-navy-soft: #6F6880;
+
+  /* Primary action gradient + elevation */
+  --kb-gradient: linear-gradient(135deg, var(--kb-purple) 0%, #8B5CF6 48%, var(--kb-green) 100%);
+  --kb-shadow-card: 0 8px 24px rgba(34, 22, 56, 0.055);
+  --kb-shadow-pop: 0 20px 60px rgba(30, 20, 60, 0.10);
 
   /* Semantic */
   --kb-warn: #F59E0B;
@@ -66,6 +80,10 @@
   --color-kb-navy-line: var(--kb-navy-line);
   --color-kb-white: var(--kb-white);
   --color-kb-cream: var(--kb-cream);
+  --color-kb-canvas: var(--kb-canvas);
+  --color-kb-surface: var(--kb-surface);
+  --color-kb-line: var(--kb-line);
+  --color-kb-tint: var(--kb-tint);
   --color-kb-ink: var(--kb-ink);
   --color-kb-ink-soft: var(--kb-ink-soft);
   --color-kb-on-navy: var(--kb-on-navy);
@@ -90,8 +108,8 @@ body {
 }
 
 body {
-  background: var(--kb-navy);
-  color: var(--kb-on-navy);
+  background: var(--kb-canvas);
+  color: var(--kb-ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
@@ -122,21 +140,146 @@ body {
 .kb-input {
   width: 100%;
   border-radius: 1rem;
-  background: white;
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  background: var(--kb-field);
   padding: 0.75rem 1rem;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--kb-ink);
   outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 
-/* The live cook/rider workspace uses a light, premium surface system while
-   the application, picker, and setup flows keep their existing dark canvas. */
+.kb-input::placeholder {
+  color: #A09AAE;
+}
+
+.kb-input:focus {
+  border-color: rgba(124, 58, 237, 0.45);
+  background: var(--kb-surface);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.10);
+}
+
+/* --------------------------------------------------------------------------
+   Shared Ferrari building blocks — the same card, button and label styles
+   as the login screen and the cook/rider dashboard.
+   -------------------------------------------------------------------------- */
+
+/* Soft purple/teal glow behind a full-page screen. */
+.kb-page {
+  position: relative;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(124, 58, 237, 0.12), transparent 38%),
+    radial-gradient(circle at 100% 100%, rgba(20, 184, 166, 0.08), transparent 35%),
+    var(--kb-canvas);
+  color: var(--kb-ink);
+}
+
+.kb-card {
+  background: var(--kb-surface);
+  border: 1px solid var(--kb-line);
+  border-radius: 24px;
+  box-shadow: var(--kb-shadow-card);
+  color: var(--kb-ink);
+}
+
+.kb-card-pop {
+  background: var(--kb-surface);
+  border: 1px solid rgba(124, 58, 237, 0.10);
+  border-radius: 28px;
+  box-shadow: var(--kb-shadow-pop);
+  color: var(--kb-ink);
+}
+
+.kb-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--kb-purple);
+}
+
+.kb-pill {
+  display: inline-flex;
+  border-radius: 9999px;
+  background: rgba(124, 58, 237, 0.08);
+  padding: 0.25rem 0.75rem;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--kb-purple);
+}
+
+.kb-btn-primary,
+.kb-btn-secondary,
+.kb-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 1rem;
+  font-weight: 700;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease, background 150ms ease;
+}
+
+.kb-btn-primary {
+  background: var(--kb-gradient);
+  color: white;
+  box-shadow: 0 8px 20px rgba(98, 54, 190, 0.22);
+}
+
+.kb-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.04);
+  box-shadow: 0 10px 24px rgba(98, 54, 190, 0.28);
+}
+
+.kb-btn-secondary {
+  background: var(--kb-tint);
+  color: var(--kb-purple);
+}
+
+.kb-btn-secondary:hover:not(:disabled) {
+  background: #E9E2F8;
+}
+
+.kb-btn-ghost {
+  background: var(--kb-surface);
+  border: 1px solid rgba(30, 20, 60, 0.10);
+  color: var(--kb-ink);
+}
+
+.kb-btn-ghost:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(30, 20, 60, 0.08);
+}
+
+.kb-btn-primary:active:not(:disabled),
+.kb-btn-secondary:active:not(:disabled),
+.kb-btn-ghost:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.kb-btn-primary:disabled,
+.kb-btn-secondary:disabled,
+.kb-btn-ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kb-alert-error {
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.06);
+  color: #DC2626;
+}
+
+.kb-alert-success {
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  background: var(--kb-mint);
+  color: var(--kb-green-deep);
+}
+
+/* The live cook/rider workspace. */
 .partner-dashboard {
-  --kb-navy: #f5f6fa;
-  --kb-navy-raised: #f1edfa;
-  --kb-navy-line: #e5e0ef;
-  --kb-on-navy: #211735;
-  --kb-on-navy-soft: #6f6880;
   background: #f5f6fa;
   color: #211735;
 }

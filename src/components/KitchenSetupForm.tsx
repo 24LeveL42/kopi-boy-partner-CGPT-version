@@ -298,274 +298,276 @@ export function KitchenSetupForm({
   }
 
   return (
-    <div className="mx-auto min-h-page max-w-md px-5 py-8" style={{ background: "var(--kb-navy)" }}>
-      <div className="mb-6 flex items-center justify-between">
-        <PartnerMenu />
-        <Logo size={48} />
-        <span className="w-8" aria-hidden="true" /> {/* balances the menu button so the logo stays centred */}
-      </div>
-      <h1 className="text-center font-display text-lg font-bold" style={{ color: "var(--kb-on-navy)" }}>
-        {isEdit ? "Manage your kitchen" : "Set up your kitchen"}
-      </h1>
-      <p className="mt-1 text-center text-sm" style={{ color: "var(--kb-on-navy-soft)" }}>
-        {isEdit
-          ? "Update your menu and details any time — changes go live immediately."
-          : "Add your menu to appear in the Customer app. A photo is optional, but at least one menu item with a price is required."}
-      </p>
+    <div className="kb-page min-h-page">
+      <div className="relative mx-auto max-w-md px-5 py-6">
+        <div className="mb-6 flex items-center justify-between">
+          <PartnerMenu />
+          <Logo size={36} />
+          <span className="w-10" aria-hidden="true" /> {/* balances the menu button so the logo stays centred */}
+        </div>
+        <div className="text-center">
+          <span className="kb-pill mb-2">Kitchen partner</span>
+        </div>
+        <h1 className="text-center font-display text-2xl font-bold tracking-tight" style={{ color: "var(--kb-ink)" }}>
+          {isEdit ? "Manage your kitchen" : "Set up your kitchen"}
+        </h1>
+        <p className="mt-1.5 text-center text-sm leading-6" style={{ color: "var(--kb-ink-soft)" }}>
+          {isEdit
+            ? "Update your menu and details any time — changes go live immediately."
+            : "Add your menu to appear in the Customer app. A photo is optional, but at least one menu item with a price is required."}
+        </p>
 
-      <form onSubmit={handleSubmit} onChange={() => setTouched(true)} className="mt-6 space-y-5">
-        <section className="space-y-3 rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-          <Field label="Business name">
-            <input
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              required
-              className="w-full rounded-xl border px-3 py-2.5 text-sm"
-              style={{ borderColor: "#E5E7EB" }}
-            />
-          </Field>
-          <Field label="Category">
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as MerchantCategory)}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm"
-              style={{ borderColor: "#E5E7EB" }}
-            >
-              {MERCHANT_CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Cuisine">
-            <select
-              value={cuisineType}
-              onChange={(e) => setCuisineType(e.target.value as CuisineType)}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm"
-              style={{ borderColor: "#E5E7EB" }}
-            >
-              {CUISINES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <input type="checkbox" checked={isHalal} onChange={(e) => setIsHalal(e.target.checked)} className="h-4 w-4" />
-            Halal
-          </label>
-          <Field label="Business Address">
-            <input
-              value={businessAddress}
-              onChange={(e) => setBusinessAddress(e.target.value)}
-              required
-              placeholder="e.g. Blk 123 Toa Payoh Lor 1, #01-23"
-              autoComplete="street-address"
-              className="w-full rounded-xl border px-3 py-2.5 text-sm"
-              style={{ borderColor: "#E5E7EB" }}
-            />
-          </Field>
-          <Field label="Postal Code">
-            <input
-              value={postalCode}
-              onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              required
-              placeholder="e.g. 310123"
-              inputMode="numeric"
-              pattern="[0-9]{6}"
-              title="6-digit Singapore postal code"
-              autoComplete="postal-code"
-              className="w-full rounded-xl border px-3 py-2.5 text-sm"
-              style={{ borderColor: "#E5E7EB" }}
-            />
-          </Field>
-          <Field label="Precise location (optional)">
-            <button
-              type="button"
-              onClick={handleUseCurrentLocation}
-              disabled={locationStatus === "locating"}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm font-medium disabled:opacity-60"
-              style={{ borderColor: "#E5E7EB", color: "var(--kb-purple)" }}
-            >
-              <PendingLabel pending={locationStatus === "locating"} pendingText="Getting your location…">Use my current location</PendingLabel>
-            </button>
-            {locationStatus === "success" && latitude != null && longitude != null && (
-              <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                Location captured ({latitude.toFixed(5)}, {longitude.toFixed(5)}).
-              </p>
-            )}
-            {locationStatus === "denied" && (
-              <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                Location permission was denied — that&apos;s fine, your address above is still used. You
-                can allow location access in your browser settings and try again any time.
-              </p>
-            )}
-            {locationStatus === "unavailable" && (
-              <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                Couldn&apos;t get your location right now — no problem, this is optional and you can try again later.
-              </p>
-            )}
-            {locationStatus === "unsupported" && (
-              <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                Your browser doesn&apos;t support location detection — no problem, this is optional.
-              </p>
-            )}
-          </Field>
-          <Field label="Description (optional)">
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm"
-              style={{ borderColor: "#E5E7EB" }}
-            />
-          </Field>
-          <Field label="Kitchen photo (optional)">
-            <div className="flex items-center gap-3">
-              {heroImage && (
-                // eslint-disable-next-line @next/next/no-img-element -- user-uploaded Supabase Storage URL, not a static asset
-                <img src={heroImage} alt="Kitchen" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleHeroFileChange}
-                disabled={heroUploading}
-                className="w-full text-sm"
-              />
+        <form onSubmit={handleSubmit} onChange={() => setTouched(true)} className="mt-6 space-y-5">
+          <section className="kb-card space-y-4 p-5">
+            <div>
+              <p className="kb-eyebrow">Your kitchen</p>
+              <h2 className="mt-1 font-display text-xl font-bold">Kitchen details</h2>
             </div>
-            {heroUploading && (
-              <p className="mt-1 flex items-center gap-1.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                <Spinner size={12} />
-                Uploading…
-              </p>
-            )}
-          </Field>
-          <Field label="PayNow method (customers pay you directly)">
-            <select
-              value={paynowType}
-              onChange={(e) => setPaynowType(e.target.value as PaynowType)}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm"
-              style={{ borderColor: "#E5E7EB" }}
+            <Field label="Business name">
+              <input
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                required
+                className="kb-input"
+              />
+            </Field>
+            <Field label="Category">
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as MerchantCategory)}
+                className="kb-input"
+              >
+                {MERCHANT_CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Cuisine">
+              <select
+                value={cuisineType}
+                onChange={(e) => setCuisineType(e.target.value as CuisineType)}
+                className="kb-input"
+              >
+                {CUISINES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <label
+              className="flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold"
+              style={{ borderColor: "rgba(124,58,237,0.12)", background: "var(--kb-field)" }}
             >
-              {PAYNOW_TYPES.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={paynowType === "mobile" ? "PayNow mobile number" : "PayNow UEN"}>
-            <input
-              value={paynowValue}
-              onChange={(e) => setPaynowValue(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm"
-              style={{ borderColor: "#E5E7EB" }}
-            />
-          </Field>
-        </section>
-
-        <section className="space-y-3 rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Menu items</h2>
-            <button type="button" onClick={addItem} className="text-sm font-semibold" style={{ color: "var(--kb-purple)" }}>
-              + Add item
-            </button>
-          </div>
-          {items.map((it, i) => (
-            <div key={it.key} className="space-y-2 border-b pb-3 last:border-0" style={{ borderColor: "#E5E7EB" }}>
-              <div className="flex items-end gap-2">
-                <Field label={`Item ${i + 1} name`} className="flex-[2]">
-                  <input
-                    value={it.name}
-                    onChange={(e) => updateItem(it.key, { name: e.target.value })}
-                    className="w-full rounded-xl border px-3 py-2.5 text-sm"
-                    style={{ borderColor: "#E5E7EB" }}
-                  />
-                </Field>
-                <Field label="Price ($)" className="flex-1">
-                  <input
-                    value={it.price}
-                    onChange={(e) => updateItem(it.key, { price: e.target.value })}
-                    inputMode="decimal"
-                    className="w-full rounded-xl border px-3 py-2.5 text-sm"
-                    style={{ borderColor: "#E5E7EB" }}
-                  />
-                </Field>
-                <button
-                  type="button"
-                  onClick={() => removeItem(it.key)}
-                  className="mb-0.5 shrink-0 rounded-xl px-3 py-2.5 text-sm"
-                  style={{ background: "var(--kb-cream)" }}
-                >
-                  Remove
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                {it.photo_url && (
+              <input type="checkbox" checked={isHalal} onChange={(e) => setIsHalal(e.target.checked)} className="h-4 w-4 accent-[#7B3FE4]" />
+              Halal
+            </label>
+            <Field label="Business Address">
+              <input
+                value={businessAddress}
+                onChange={(e) => setBusinessAddress(e.target.value)}
+                required
+                placeholder="e.g. Blk 123 Toa Payoh Lor 1, #01-23"
+                autoComplete="street-address"
+                className="kb-input"
+              />
+            </Field>
+            <Field label="Postal Code">
+              <input
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                required
+                placeholder="e.g. 310123"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                title="6-digit Singapore postal code"
+                autoComplete="postal-code"
+                className="kb-input"
+              />
+            </Field>
+            <Field label="Precise location (optional)">
+              <button
+                type="button"
+                onClick={handleUseCurrentLocation}
+                disabled={locationStatus === "locating"}
+                className="kb-btn-secondary w-full py-3 text-sm"
+              >
+                <PendingLabel pending={locationStatus === "locating"} pendingText="Getting your location…">Use my current location</PendingLabel>
+              </button>
+              {locationStatus === "success" && latitude != null && longitude != null && (
+                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                  Location captured ({latitude.toFixed(5)}, {longitude.toFixed(5)}).
+                </p>
+              )}
+              {locationStatus === "denied" && (
+                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                  Location permission was denied — that&apos;s fine, your address above is still used. You
+                  can allow location access in your browser settings and try again any time.
+                </p>
+              )}
+              {locationStatus === "unavailable" && (
+                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                  Couldn&apos;t get your location right now — no problem, this is optional and you can try again later.
+                </p>
+              )}
+              {locationStatus === "unsupported" && (
+                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                  Your browser doesn&apos;t support location detection — no problem, this is optional.
+                </p>
+              )}
+            </Field>
+            <Field label="Description (optional)">
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+                className="kb-input"
+              />
+            </Field>
+            <Field label="Kitchen photo (optional)">
+              <div className="flex items-center gap-3">
+                {heroImage && (
                   // eslint-disable-next-line @next/next/no-img-element -- user-uploaded Supabase Storage URL, not a static asset
-                  <img src={it.photo_url} alt={it.name || "Dish"} className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+                  <img src={heroImage} alt="Kitchen" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
                 )}
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handleItemPhotoChange(it.key, e)}
-                  disabled={it.photoUploading}
-                  className="w-full text-xs"
+                  onChange={handleHeroFileChange}
+                  disabled={heroUploading}
+                  className="w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-[#F1EDFA] file:px-3 file:py-2 file:font-semibold file:text-[color:var(--kb-purple)]"
                 />
-                {it.photoUploading && (
-                  <span className="flex shrink-0 items-center gap-1.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                    <Spinner size={12} />
-                    Uploading…
-                  </span>
-                )}
               </div>
+              {heroUploading && (
+                <p className="mt-1 flex items-center gap-1.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                  <Spinner size={12} />
+                  Uploading…
+                </p>
+              )}
+            </Field>
+            <Field label="PayNow method (customers pay you directly)">
+              <select
+                value={paynowType}
+                onChange={(e) => setPaynowType(e.target.value as PaynowType)}
+                className="kb-input"
+              >
+                {PAYNOW_TYPES.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={paynowType === "mobile" ? "PayNow mobile number" : "PayNow UEN"}>
+              <input
+                value={paynowValue}
+                onChange={(e) => setPaynowValue(e.target.value)}
+                className="kb-input"
+              />
+            </Field>
+          </section>
+
+          <section className="kb-card space-y-4 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="kb-eyebrow">What you sell</p>
+                <h2 className="mt-1 font-display text-xl font-bold">Menu items</h2>
+              </div>
+              <button type="button" onClick={addItem} className="kb-btn-secondary px-4 py-2 text-sm">
+                + Add item
+              </button>
             </div>
-          ))}
-        </section>
+            {items.map((it, i) => (
+              <div key={it.key} className="space-y-3 border-b pb-4 last:border-0 last:pb-0" style={{ borderColor: "var(--kb-line)" }}>
+                <div className="flex items-end gap-2">
+                  <Field label={`Item ${i + 1} name`} className="flex-[2]">
+                    <input
+                      value={it.name}
+                      onChange={(e) => updateItem(it.key, { name: e.target.value })}
+                      className="kb-input"
+                    />
+                  </Field>
+                  <Field label="Price ($)" className="flex-1">
+                    <input
+                      value={it.price}
+                      onChange={(e) => updateItem(it.key, { price: e.target.value })}
+                      inputMode="decimal"
+                      className="kb-input"
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(it.key)}
+                    className="mb-0.5 shrink-0 rounded-xl px-3 py-3 text-sm font-semibold transition-colors hover:bg-[#FDECEC]"
+                    style={{ color: "var(--kb-danger)", background: "rgba(239,68,68,0.06)" }}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {it.photo_url && (
+                    // eslint-disable-next-line @next/next/no-img-element -- user-uploaded Supabase Storage URL, not a static asset
+                    <img src={it.photo_url} alt={it.name || "Dish"} className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleItemPhotoChange(it.key, e)}
+                    disabled={it.photoUploading}
+                    className="w-full text-xs file:mr-3 file:rounded-xl file:border-0 file:bg-[#F1EDFA] file:px-3 file:py-2 file:font-semibold file:text-[color:var(--kb-purple)]"
+                  />
+                  {it.photoUploading && (
+                    <span className="flex shrink-0 items-center gap-1.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                      <Spinner size={12} />
+                      Uploading…
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </section>
 
-        {error && (
-          <p className="rounded-xl px-3 py-2 text-sm" style={{ background: "rgba(239,68,68,0.15)", color: "#B91C1C" }}>
-            {error}
-          </p>
-        )}
+          {error && (
+            <p className="kb-alert-error rounded-2xl px-4 py-3 text-sm">
+              {error}
+            </p>
+          )}
 
-        <label
-          className="flex items-start gap-3 rounded-2xl bg-white p-4 text-sm"
-          style={{ color: "var(--kb-ink)", opacity: alreadyAcknowledged ? 0.7 : 1 }}
-        >
-          <input
-            type="checkbox"
-            checked={acknowledged}
-            onChange={(e) => setAcknowledged(e.target.checked)}
-            disabled={alreadyAcknowledged}
-            className="mt-0.5 h-4 w-4 shrink-0"
-          />
-          <span>{KITCHEN_TERMS}</span>
-        </label>
+          <label
+            className="kb-card flex items-start gap-3 p-4 text-sm leading-6"
+            style={{ opacity: alreadyAcknowledged ? 0.7 : 1 }}
+          >
+            <input
+              type="checkbox"
+              checked={acknowledged}
+              onChange={(e) => setAcknowledged(e.target.checked)}
+              disabled={alreadyAcknowledged}
+              className="mt-1 h-4 w-4 shrink-0 accent-[#7B3FE4]"
+            />
+            <span>{KITCHEN_TERMS}</span>
+          </label>
 
-        <button
-          type="submit"
-          disabled={loading || !acknowledged || heroUploading || items.some((it) => it.photoUploading)}
-          className="w-full rounded-2xl py-3.5 text-[15px] font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(90deg, var(--kb-purple) 0%, var(--kb-green) 100%)" }}
-        >
-          <PendingLabel pending={loading} pendingText={isEdit ? "Saving changes…" : "Going live…"}>
-            {isEdit ? "Save changes" : "Go live"}
-          </PendingLabel>
-        </button>
-        <button
-          type="button"
-          onClick={requestLeave}
-          disabled={loading}
-          className="w-full rounded-2xl border py-3 text-[15px] font-semibold disabled:opacity-60"
-          style={{ borderColor: "var(--kb-navy-line)", color: "var(--kb-on-navy)" }}
-        >
-          {isEdit ? "Cancel" : "Cancel setup"}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={loading || !acknowledged || heroUploading || items.some((it) => it.photoUploading)}
+            className="kb-btn-primary w-full py-3.5 text-[15px]"
+          >
+            <PendingLabel pending={loading} pendingText={isEdit ? "Saving changes…" : "Going live…"}>
+              {isEdit ? "Save changes" : "Go live"}
+            </PendingLabel>
+          </button>
+          <button
+            type="button"
+            onClick={requestLeave}
+            disabled={loading}
+            className="kb-btn-ghost w-full py-3 text-[15px]"
+          >
+            {isEdit ? "Cancel" : "Cancel setup"}
+          </button>
+        </form>
+      </div>
 
       {confirmLeave && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-6" role="alertdialog" aria-modal="true" aria-labelledby="leave-title">
@@ -573,10 +575,10 @@ export function KitchenSetupForm({
             type="button"
             aria-label="Keep editing"
             onClick={() => setConfirmLeave(false)}
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-[#1E143C]/40 backdrop-blur-[2px]"
           />
-          <div className="relative w-full max-w-sm rounded-2xl bg-white p-5" style={{ color: "var(--kb-ink)" }}>
-            <h2 id="leave-title" className="font-display text-base font-bold">
+          <div className="kb-card-pop relative w-full max-w-sm p-6">
+            <h2 id="leave-title" className="font-display text-xl font-bold">
               {isEdit ? "Discard your changes?" : "Cancel kitchen setup?"}
             </h2>
             <p className="mt-1 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
@@ -589,16 +591,14 @@ export function KitchenSetupForm({
                 type="button"
                 autoFocus
                 onClick={() => setConfirmLeave(false)}
-                className="w-full rounded-xl py-2.5 text-sm font-semibold text-white"
-                style={{ background: "linear-gradient(90deg, var(--kb-purple) 0%, var(--kb-green) 100%)" }}
+                className="kb-btn-primary w-full py-3 text-sm"
               >
                 Keep editing
               </button>
               <button
                 type="button"
                 onClick={leave}
-                className="w-full rounded-xl py-2.5 text-sm font-semibold"
-                style={{ background: "var(--kb-cream)" }}
+                className="kb-btn-ghost w-full py-3 text-sm"
               >
                 {isEdit ? "Discard changes" : "Yes, cancel setup"}
               </button>
@@ -612,9 +612,9 @@ export function KitchenSetupForm({
 
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <label className={`block text-xs font-medium ${className ?? ""}`} style={{ color: "var(--kb-ink-soft)" }}>
+    <label className={`block text-xs font-semibold ${className ?? ""}`} style={{ color: "var(--kb-ink-soft)" }}>
       {label}
-      <div className="mt-1">{children}</div>
+      <div className="mt-1.5">{children}</div>
     </label>
   );
 }

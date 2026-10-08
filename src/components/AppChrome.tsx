@@ -123,8 +123,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   return (
     <BackContext.Provider value={ctx}>
       <header
-        className="fixed inset-x-0 top-0 z-40 border-b"
-        style={{ background: "var(--kb-navy)", borderColor: "var(--kb-navy-line)", height: "var(--app-bar-h)" }}
+        className="fixed inset-x-0 top-0 z-40 border-b backdrop-blur-md"
+        style={{ background: "rgba(255,255,255,0.86)", borderColor: "var(--kb-line)", height: "var(--app-bar-h)" }}
       >
         <nav
           aria-label="Page navigation"
@@ -135,8 +135,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             onClick={handleBack}
             disabled={backDisabled}
             aria-label="Go back"
-            className="flex items-center gap-1.5 justify-self-start rounded-full py-1.5 pl-2 pr-3 text-sm font-semibold disabled:opacity-35"
-            style={{ color: "var(--kb-on-navy)" }}
+            className="flex items-center gap-1.5 justify-self-start rounded-full py-1.5 pl-2 pr-3 text-sm font-semibold transition-colors hover:bg-[#F1EDFA] disabled:opacity-35 disabled:hover:bg-transparent"
+            style={{ color: "var(--kb-ink)" }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="15 5 8 12 15 19" />
@@ -148,8 +148,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={handleCancel}
             aria-label="Cancel and discard changes"
-            className="flex items-center gap-1.5 justify-self-center rounded-full px-3 py-1.5 text-sm font-semibold"
-            style={{ color: "var(--kb-on-navy)" }}
+            className="flex items-center gap-1.5 justify-self-center rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-[#F1EDFA]"
+            style={{ color: "var(--kb-ink-soft)" }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -170,8 +170,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             }}
             aria-label="Go to home"
             aria-current={onHome ? "page" : undefined}
-            className="flex items-center gap-1.5 justify-self-end rounded-full py-1.5 pl-3 pr-2 text-sm font-semibold"
-            style={{ color: onHome ? "var(--kb-green)" : "var(--kb-on-navy)" }}
+            className="flex items-center gap-1.5 justify-self-end rounded-full py-1.5 pl-3 pr-2 text-sm font-semibold transition-colors hover:bg-[#F1EDFA]"
+            style={onHome ? { color: "var(--kb-purple)", background: "var(--kb-tint)" } : { color: "var(--kb-ink)" }}
           >
             Home
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

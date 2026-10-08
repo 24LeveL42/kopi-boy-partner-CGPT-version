@@ -9,7 +9,7 @@ export function Avatar({ url, name, size = 56 }: { url: string | null; name: str
         width={size}
         height={size}
         className="shrink-0 rounded-full object-cover"
-        style={{ width: size, height: size }}
+        style={{ width: size, height: size, boxShadow: "0 0 0 2px white, 0 0 0 3px rgba(124,58,237,0.18)" }}
       />
     );
   }
@@ -21,9 +21,9 @@ export function Avatar({ url, name, size = 56 }: { url: string | null; name: str
         width: size,
         height: size,
         fontSize: size * 0.4,
-        background: "var(--kb-navy-raised)",
-        color: "var(--kb-on-navy-soft)",
-        border: "1px solid var(--kb-navy-line)",
+        background: "linear-gradient(135deg, var(--kb-tint) 0%, var(--kb-mint) 100%)",
+        color: "var(--kb-purple)",
+        boxShadow: "0 0 0 2px white, 0 0 0 3px rgba(124,58,237,0.18)",
       }}
     >
       {(name?.trim().charAt(0) || "?").toUpperCase()}

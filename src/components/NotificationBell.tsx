@@ -11,8 +11,8 @@ export function NotificationBell() {
     <Link
       href="/notifications"
       aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
-      className="relative rounded-full p-1.5"
-      style={{ color: "var(--kb-on-navy)" }}
+      className="relative flex h-10 w-10 items-center justify-center rounded-xl border bg-white transition hover:shadow-md"
+      style={{ color: "var(--kb-ink)", borderColor: "var(--kb-line)" }}
     >
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M6 9a6 6 0 1112 0c0 5 2 6.5 2 6.5H4S6 14 6 9z" />
@@ -20,7 +20,7 @@ export function NotificationBell() {
       </svg>
       {unreadCount > 0 && (
         <span
-          className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+          className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
           style={{ background: "var(--kb-danger)" }}
         >
           {unreadCount > 9 ? "9+" : unreadCount}

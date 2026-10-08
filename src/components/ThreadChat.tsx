@@ -163,8 +163,9 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
   const canSend = !sending && normalizeOrderChatBody(draft, photo !== null) !== null;
 
   return (
-    <div className="mt-3 rounded-2xl bg-white p-3" style={{ color: "var(--kb-ink)" }}>
-      <p className="mb-2 text-xs font-medium uppercase" style={{ color: "var(--kb-purple)" }}>
+    <div className="mt-3 rounded-2xl border bg-white p-3 shadow-[0_5px_16px_rgba(34,22,56,0.045)]" style={{ color: "var(--kb-ink)", borderColor: "var(--kb-line)" }}>
+      <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide" style={{ color: "var(--kb-purple)" }}>
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--kb-green)" }} />
         {config.title}
       </p>
 
@@ -180,15 +181,15 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
             const url = m.photo_path ? photoUrls[m.photo_path] : undefined;
             return (
               <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-                <span className="mb-0.5 px-1 text-[10px] font-semibold uppercase" style={{ color: "var(--kb-ink-soft)" }}>
+                <span className="mb-0.5 px-1 text-[10px] font-bold uppercase tracking-wide" style={{ color: "var(--kb-ink-soft)" }}>
                   {mine ? "You" : config.otherLabel}
                 </span>
                 <div
-                  className={`max-w-[80%] overflow-hidden rounded-xl text-sm break-words ${mine ? "rounded-tr-sm" : "rounded-tl-sm"}`}
+                  className={`max-w-[80%] overflow-hidden rounded-2xl text-sm break-words ${mine ? "rounded-tr-md" : "rounded-tl-md"}`}
                   style={
                     mine
-                      ? { background: "var(--kb-green-deep)", color: "white" }
-                      : { background: "var(--kb-navy-raised)", color: "var(--kb-on-navy)" }
+                      ? { background: "linear-gradient(135deg, var(--kb-purple) 0%, #8B5CF6 100%)", color: "white" }
+                      : { background: "#F5F3FA", color: "var(--kb-ink)" }
                   }
                 >
                   {m.photo_path &&
@@ -210,7 +211,7 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
       </div>
 
       {error && (
-        <p className="mt-2 rounded-xl px-3 py-1.5 text-xs" style={{ background: "rgba(239,68,68,0.15)", color: "#B91C1C" }}>
+        <p className="kb-alert-error mt-2 rounded-xl px-3 py-1.5 text-xs">
           {error}
         </p>
       )}
@@ -218,7 +219,7 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
       {photo && (
         <div
           className="mt-2 flex items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-xs"
-          style={{ background: "var(--kb-cream)" }}
+          style={{ background: "var(--kb-tint)" }}
         >
           <span className="truncate">📎 {photo.name}</span>
           <button
@@ -247,8 +248,8 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
           onClick={() => fileInputRef.current?.click()}
           disabled={sending}
           aria-label="Attach a photo"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border disabled:opacity-60"
-          style={{ borderColor: "var(--kb-navy-line)", color: "var(--kb-ink-soft)" }}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl disabled:opacity-60"
+          style={{ background: "var(--kb-tint)", color: "var(--kb-purple)" }}
         >
           <CameraIcon />
         </button>
@@ -261,14 +262,13 @@ export function ThreadChat({ config, threadId, userId }: { config: ThreadChatCon
           readOnly={sending} // what's typed now would be wiped when the send lands
           placeholder={config.placeholder}
           maxLength={MESSAGE_BODY_MAX_LENGTH}
-          className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm"
-          style={{ borderColor: "var(--kb-navy-line)", color: "var(--kb-ink)" }}
+          className="min-w-0 flex-1 rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:border-[#7B3FE4]/45 focus:bg-white"
+          style={{ borderColor: "rgba(124,58,237,0.12)", background: "var(--kb-field)", color: "var(--kb-ink)" }}
         />
         <button
           onClick={send}
           disabled={!canSend}
-          className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "var(--kb-purple)" }}
+          className="kb-btn-primary shrink-0 rounded-xl px-4 py-2.5 text-sm"
         >
           <PendingLabel pending={sending} pendingText="Sending…">Send</PendingLabel>
         </button>

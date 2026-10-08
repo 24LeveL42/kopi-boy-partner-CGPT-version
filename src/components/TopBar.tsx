@@ -14,8 +14,8 @@ export function TopBar({ badge = "Partner" }: { badge?: string }) {
         <NotificationBell />
         <Link
           href="/account"
-          className="rounded-full px-3 py-1 text-xs font-semibold"
-          style={{ background: "var(--kb-navy-raised)", color: "var(--kb-on-navy-soft)", border: "1px solid var(--kb-navy-line)" }}
+          className="rounded-full px-3 py-1.5 text-xs font-bold"
+          style={{ background: "var(--kb-tint)", color: "var(--kb-purple)" }}
         >
           {badge}
         </Link>

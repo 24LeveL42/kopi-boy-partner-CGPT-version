@@ -8,11 +8,11 @@ export const metadata: Metadata = {
   description: "Cook and rider app for Kopi Boy — orders, deliveries, and payouts.",
   icons: { apple: "/icons/apple-touch-icon.png" },
   // iOS "Add to Home Screen": launch full-screen with the KB Partner name.
-  appleWebApp: { capable: true, title: "KB Partner", statusBarStyle: "black" },
+  appleWebApp: { capable: true, title: "KB Partner", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0B1B34", // --kb-navy: tints the browser/status bar to match the app
+  themeColor: "#FFFFFF", // matches the white Back/Cancel/Home bar
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

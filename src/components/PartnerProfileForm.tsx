@@ -80,13 +80,15 @@ export function PartnerProfileForm({
     <form
       onSubmit={handleSubmit}
       onChange={() => setJustSaved(false)}
-      className="space-y-4 rounded-2xl bg-white p-5 shadow-lg"
-      style={{ color: "var(--kb-ink)" }}
+      className="kb-card space-y-4 p-5"
     >
-      <h2 className="font-display text-base font-bold">{role === "rider" ? "Rider profile" : "Picker profile"}</h2>
+      <div>
+        <p className="kb-eyebrow">{role === "rider" ? "Delivery partner" : "Picker"}</p>
+        <h2 className="mt-1 font-display text-xl font-bold">{role === "rider" ? "Rider profile" : "Picker profile"}</h2>
+      </div>
 
       <div>
-        <span className="mb-1 block text-xs font-medium" style={{ color: "var(--kb-ink-soft)" }}>
+        <span className="mb-1.5 block text-xs font-semibold" style={{ color: "var(--kb-ink-soft)" }}>
           Your photo
         </span>
         <PhotoPicker
@@ -103,14 +105,14 @@ export function PartnerProfileForm({
       </div>
 
       <div>
-        <span className="mb-1 block text-xs font-medium" style={{ color: "var(--kb-ink-soft)" }}>
+        <span className="mb-1.5 block text-xs font-semibold" style={{ color: "var(--kb-ink-soft)" }}>
           Full name
         </span>
         <p className="text-sm font-semibold">{fullName || "—"}</p>
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-xs font-medium" style={{ color: "var(--kb-ink-soft)" }}>
+        <span className="mb-1.5 block text-xs font-semibold" style={{ color: "var(--kb-ink-soft)" }}>
           Contact number
         </span>
         <input
@@ -118,19 +120,18 @@ export function PartnerProfileForm({
           type="tel"
           value={contactNumber}
           onChange={(e) => setContactNumber(e.target.value)}
-          className="w-full rounded-xl border px-3 py-2.5 text-sm"
-          style={{ borderColor: "#E5E7EB" }}
+          className="kb-input"
           placeholder="e.g. 91234567"
         />
       </label>
 
       {error && (
-        <p role="alert" className="rounded-xl px-3 py-2 text-sm" style={{ background: "rgba(239,68,68,0.15)", color: "#B91C1C" }}>
+        <p role="alert" className="kb-alert-error rounded-2xl px-4 py-3 text-sm">
           {error}
         </p>
       )}
       {justSaved && !dirty && (
-        <p role="status" className="rounded-xl px-3 py-2 text-sm" style={{ background: "rgba(34,197,94,0.15)", color: "#15803D" }}>
+        <p role="status" className="kb-alert-success rounded-2xl px-4 py-3 text-sm">
           Profile saved.
         </p>
       )}
@@ -138,8 +139,7 @@ export function PartnerProfileForm({
       <button
         type="submit"
         disabled={saving || photoUploading || !dirty}
-        className="w-full rounded-2xl py-3 text-[15px] font-semibold text-white disabled:opacity-60"
-        style={{ background: "linear-gradient(90deg, var(--kb-purple) 0%, var(--kb-green) 100%)" }}
+        className="kb-btn-primary w-full py-3.5 text-[15px]"
       >
         <PendingLabel pending={saving} pendingText="Saving…">Save changes</PendingLabel>
       </button>

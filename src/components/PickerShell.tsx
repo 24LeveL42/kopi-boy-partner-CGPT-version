@@ -132,103 +132,106 @@ export function PickerShell({ userId, profile }: { userId: string; profile?: Pro
   }
 
   return (
-    <div className="mx-auto min-h-page max-w-md px-5 py-6" style={{ background: "var(--kb-navy)" }}>
-      <TopBar badge="Picker" />
+    <div className="partner-dashboard min-h-page pb-10">
+      <div className="mx-auto max-w-md px-4 pt-3 sm:max-w-lg sm:px-6">
+        <TopBar badge="Picker" />
 
-      {profile && (
-        <div className="mt-4">
-          <ProfileSummaryCard profile={profile} />
-        </div>
-      )}
-
-      <h1 className="mt-4 font-display text-lg font-bold" style={{ color: "var(--kb-on-navy)" }}>
-        Picker
-      </h1>
-
-      {error && (
-        <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ background: "rgba(239,68,68,0.15)", color: "#FCA5A5" }}>
-          {error}
-        </p>
-      )}
-
-      {myPickup ? (
-        <div className="mt-4 rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-          <p className="text-xs font-medium uppercase" style={{ color: "var(--kb-purple)" }}>
-            Your active pickup
-          </p>
-          <p className="mt-1 text-sm font-semibold">{myPickup.kitchen_business_name}</p>
-          <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{myPickup.kitchen_address}</p>
-          {myPickup.kitchen_maps_url && (
-            <a
-              href={myPickup.kitchen_maps_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-semibold"
-              style={{ color: "var(--kb-purple)" }}
-            >
-              Open in Google Maps
-            </a>
-          )}
-          <p className="mt-2 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-            Collect from the cook, meet the rider nearby, and get paid directly by the rider (suggested ${myPickup.suggested_fee.toFixed(2)}).
-          </p>
-          <button
-            onClick={completeHandoff}
-            disabled={busy}
-            className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "var(--kb-green-deep)" }}
-          >
-            <PendingLabel pending={isRunning(`${myPickup.id}:complete`)} pendingText="Completing…">Mark handoff complete</PendingLabel>
-          </button>
-
-          <PickupChat pickupRequestId={myPickup.id} userId={userId} as="picker" />
-        </div>
-      ) : (
-        <>
-          <p className="mt-1 text-sm" style={{ color: "var(--kb-on-navy-soft)" }}>
-            Nearby pickup requests from riders
-          </p>
-
-          {loading ? (
-            <div className="mt-4">
-              <SkeletonCards count={2} />
-            </div>
-          ) : openRequests.length === 0 ? (
-            <p className="mt-4 rounded-2xl bg-white p-4 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
-              No open requests right now — check back later.
+        <section className="partner-surface relative mt-4 overflow-hidden rounded-[28px] p-5">
+          <div className="pointer-events-none absolute -right-12 -top-20 h-56 w-56 rounded-full opacity-70" style={{ background: "radial-gradient(circle, rgba(123,63,228,.14), transparent 70%)" }} />
+          <div className="relative">
+            <p className="kb-eyebrow">Kopi Boy · Picker</p>
+            <h1 className="mt-2 font-display text-2xl font-bold tracking-tight" style={{ color: "var(--kb-ink)" }}>
+              Picker
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
+              {myPickup ? "You have a pickup in progress" : "Nearby pickup requests from riders"}
             </p>
-          ) : (
-            <div className="mt-4 space-y-2">
-              {openRequests.map((r) => (
-                <div key={r.id} className="rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-                  <p className="text-sm font-semibold">{r.kitchen_business_name}</p>
-                  <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{r.kitchen_address}</p>
-                  <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                    Suggested ${r.suggested_fee.toFixed(2)} — paid directly by the rider
-                  </p>
-                  <button
-                    onClick={() => accept(r.id)}
-                    disabled={busy}
-                    className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                    style={{ background: "var(--kb-purple)" }}
-                  >
-                    <PendingLabel pending={isRunning(`${r.id}:accept`)} pendingText="Accepting…">Accept</PendingLabel>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+            {profile && (
+              <div className="mt-4">
+                <ProfileSummaryCard profile={profile} />
+              </div>
+            )}
+          </div>
+        </section>
 
-          <button
-            onClick={() => run("refresh", () => load(true))}
-            disabled={busy}
-            className="mt-4 w-full rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-60"
-            style={{ background: "var(--kb-navy-raised)", color: "var(--kb-on-navy)" }}
-          >
-            <PendingLabel pending={isRunning("refresh")} pendingText="Refreshing…">Refresh</PendingLabel>
-          </button>
-        </>
-      )}
+        {error && (
+          <p className="kb-alert-error mt-4 rounded-2xl px-4 py-3 text-xs">
+            {error}
+          </p>
+        )}
+
+        {myPickup ? (
+          <div className="partner-surface mt-4 rounded-[28px] p-5" style={{ color: "var(--kb-ink)" }}>
+            <p className="kb-eyebrow">
+              Your active pickup
+            </p>
+            <p className="mt-2 text-[15px] font-bold">{myPickup.kitchen_business_name}</p>
+            <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{myPickup.kitchen_address}</p>
+            {myPickup.kitchen_maps_url && (
+              <a
+                href={myPickup.kitchen_maps_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex rounded-full px-3 py-1.5 text-xs font-bold"
+                style={{ color: "var(--kb-purple)", background: "var(--kb-tint)" }}
+              >
+                Open in Google Maps ›
+              </a>
+            )}
+            <p className="mt-3 text-xs leading-5" style={{ color: "var(--kb-ink-soft)" }}>
+              Collect from the cook, meet the rider nearby, and get paid directly by the rider (suggested ${myPickup.suggested_fee.toFixed(2)}).
+            </p>
+            <button
+              onClick={completeHandoff}
+              disabled={busy}
+              className="kb-btn-primary mt-4 w-full py-3.5 text-[15px]"
+            >
+              <PendingLabel pending={isRunning(`${myPickup.id}:complete`)} pendingText="Completing…">Mark handoff complete</PendingLabel>
+            </button>
+
+            <PickupChat pickupRequestId={myPickup.id} userId={userId} as="picker" />
+          </div>
+        ) : (
+          <>
+            {loading ? (
+              <div className="mt-4">
+                <SkeletonCards count={2} />
+              </div>
+            ) : openRequests.length === 0 ? (
+              <p className="partner-surface mt-4 rounded-2xl p-5 text-center text-sm" style={{ color: "var(--kb-ink-soft)" }}>
+                No open requests right now — check back later.
+              </p>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {openRequests.map((r) => (
+                  <div key={r.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
+                    <p className="text-[15px] font-bold">{r.kitchen_business_name}</p>
+                    <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{r.kitchen_address}</p>
+                    <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                      Suggested ${r.suggested_fee.toFixed(2)} — paid directly by the rider
+                    </p>
+                    <button
+                      onClick={() => accept(r.id)}
+                      disabled={busy}
+                      className="partner-primary mt-3 w-full rounded-xl py-2.5 text-sm font-bold disabled:opacity-60"
+                    >
+                      <PendingLabel pending={isRunning(`${r.id}:accept`)} pendingText="Accepting…">Accept</PendingLabel>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => run("refresh", () => load(true))}
+              disabled={busy}
+              className="kb-btn-secondary mt-4 w-full py-3 text-sm"
+            >
+              <PendingLabel pending={isRunning("refresh")} pendingText="Refreshing…">Refresh</PendingLabel>
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

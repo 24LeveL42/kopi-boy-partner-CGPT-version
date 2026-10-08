@@ -62,25 +62,30 @@ export default async function RequestPickerPage() {
   }));
 
   return (
-    <div className="mx-auto min-h-page max-w-md px-5 py-6" style={{ background: "var(--kb-navy)" }}>
-      <TopBar />
-      <LiveRefresh sources={[{ table: "pickup_requests", filter: `rider_id=eq.${user.id}` }]} />
-      <h1 className="mt-4 font-display text-lg font-bold" style={{ color: "var(--kb-on-navy)" }}>
-        Request a picker
-      </h1>
-      <p className="mt-1 text-sm" style={{ color: "var(--kb-on-navy-soft)" }}>
-        Optional — a picker collects from the cook and hands the order to you nearby.
-      </p>
-
-      {!kitchens || kitchens.length === 0 ? (
-        <p className="mt-4 rounded-2xl bg-white p-4 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
-          No live kitchens to pick up from yet.
-        </p>
-      ) : (
-        <div className="mt-4">
-          <RequestPickerForm userId={user.id} kitchens={kitchens} myRequests={myRequests} />
+    <div className="kb-page min-h-page">
+      <div className="relative mx-auto max-w-md px-4 pb-10 pt-3 sm:px-6">
+        <TopBar />
+        <LiveRefresh sources={[{ table: "pickup_requests", filter: `rider_id=eq.${user.id}` }]} />
+        <div className="mt-5">
+          <p className="kb-eyebrow">On the road</p>
+          <h1 className="mt-1 font-display text-2xl font-bold tracking-tight" style={{ color: "var(--kb-ink)" }}>
+            Request a picker
+          </h1>
+          <p className="mt-1 text-sm leading-6" style={{ color: "var(--kb-ink-soft)" }}>
+            Optional — a picker collects from the cook and hands the order to you nearby.
+          </p>
         </div>
-      )}
+
+        {!kitchens || kitchens.length === 0 ? (
+          <p className="kb-card mt-5 p-5 text-center text-sm" style={{ color: "var(--kb-ink-soft)" }}>
+            No live kitchens to pick up from yet.
+          </p>
+        ) : (
+          <div className="mt-5">
+            <RequestPickerForm userId={user.id} kitchens={kitchens} myRequests={myRequests} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
