@@ -9,6 +9,7 @@ import { SkeletonCards } from "./Skeleton";
 import type { OrderWithItems } from "@/lib/types-orders";
 import type { DeliveryRequest, DeliveryRiderDetails } from "@/lib/types-delivery";
 import { PartnerRiderChat } from "./PartnerRiderChat";
+import { RiderLocationMap } from "./RiderLocationMap";
 
 interface OrderWithDelivery extends OrderWithItems {
   delivery_requests: DeliveryRequest[];
@@ -31,6 +32,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
   const [inKitchen, setInKitchen] = useState<OrderWithDelivery[]>([]);
   const [riderDetails, setRiderDetails] = useState<Record<string, DeliveryRiderDetails>>({});
   const [openChatId, setOpenChatId] = useState<string | null>(null);
+  const [trackingId, setTrackingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { busy, isRunning, run } = usePendingAction();
@@ -330,6 +332,12 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                               </button>
                             </div>
                             {openChatId === active.id && <div className="border-t p-3" style={{ borderColor: "#E8DFFF" }}><PartnerRiderChat deliveryRequestId={active.id} userId={kitchenId} /></div>}
+                            <div className="border-t p-3" style={{ borderColor: "#E8DFFF" }}>
+                              <button type="button" onClick={() => setTrackingId(trackingId === active.id ? null : active.id)} aria-expanded={trackingId === active.id} className="w-full rounded-xl bg-white py-2.5 text-xs font-bold" style={{ color: "var(--kb-purple)" }}>
+                                {trackingId === active.id ? "Hide rider map" : "📍 Track rider"}
+                              </button>
+                              {trackingId === active.id && <div className="mt-2"><RiderLocationMap deliveryRequestId={active.id} /></div>}
+                            </div>
                           </>
                         ) : (
                           <p className="p-3 text-center text-sm font-semibold" style={{ color: "var(--kb-ink-soft)" }}>Waiting for a rider</p>

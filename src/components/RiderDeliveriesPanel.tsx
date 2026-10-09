@@ -257,6 +257,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
           <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ color: "var(--kb-ink-soft)", background: "#F7F6FA" }}>
             Collect from the cook and coordinate the customer handoff with them. Agree the delivery fee directly with the cook.
           </p>
+          <RiderLocationShare key={myDelivery.id} deliveryRequestId={myDelivery.id} riderId={riderId} />
           {proofOpen ? (
             <div className="mt-3 rounded-2xl p-3" style={{ background: "var(--kb-cream)" }}>
               <p className="text-sm font-semibold">Proof of delivery</p>
@@ -403,4 +404,162 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
 function RiderMetric({ label, value, tone }: { label: string; value: number; tone: "purple" | "teal" | "neutral" }) {
   const colors = tone === "purple" ? ["#F1EDFA", "var(--kb-purple)"] : tone === "teal" ? ["#E5F7EF", "var(--kb-green-deep)"] : ["#F5F4F7", "var(--kb-ink)"];
   return <div className="rounded-2xl border border-[#eceaf1] p-3 sm:p-4" style={{ background: colors[0] }}><span className="block text-xl font-bold sm:text-2xl" style={{ color: colors[1] }}>{value}</span><span className="mt-1 block text-[10px] font-semibold leading-tight sm:text-xs" style={{ color: "var(--kb-ink-soft)" }}>{label}</span></div>;
+}
+
+// Send at most one location update this often.
+const LOCATION_SEND_MS = 10_000;
+
+/**
+ * Opt-in live location for the rider's accepted delivery. Off on every load;
+ * while on it watches GPS, upserts rider_live_locations at most every ~10s
+ * and holds a screen wake lock. Switching off, unmounting (delivery no longer
+ * accepted) or an error stops the watch and deletes the row.
+ */
+function RiderLocationShare({ deliveryRequestId, riderId }: { deliveryRequestId: string; riderId: string }) {
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sharing) return;
+    const supabase = createClient();
+    let stopped = false;
+    let latest: GeolocationPosition | null = null;
+    let lastSent = 0;
+    let inFlight = false;
+    let wakeLock: WakeLockSentinel | null = null;
+
+    const fail = (message: string) => {
+      if (stopped) return;
+      setShareError(message);
+      setSharing(false);
+    };
+
+    const removeRow = () =>
+      supabase
+        .from("rider_live_locations")
+        .delete()
+        .eq("delivery_request_id", deliveryRequestId)
+        .eq("rider_id", riderId);
+
+    const send = async () => {
+      if (stopped || inFlight || !latest || Date.now() - lastSent < LOCATION_SEND_MS) return;
+      inFlight = true;
+      lastSent = Date.now();
+      const { coords } = latest;
+      const { error } = await supabase.from("rider_live_locations").upsert(
+        {
+          delivery_request_id: deliveryRequestId,
+          rider_id: riderId,
+          lat: coords.latitude,
+          lng: coords.longitude,
+          accuracy_m: coords.accuracy,
+          heading: coords.heading !== null && Number.isFinite(coords.heading) ? coords.heading : null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "delivery_request_id" }
+      );
+      inFlight = false;
+      // Sharing was switched off while this write was in flight — it may have
+      // landed after the cleanup's delete, so delete again.
+      if (stopped) {
+        void removeRow();
+        return;
+      }
+      if (error) fail(`Couldn't share your location: ${error.message}`);
+    };
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        latest = position;
+        void send();
+      },
+      (err) => {
+        fail(
+          err.code === err.PERMISSION_DENIED
+            ? "Location permission was denied. Allow location for this site in your browser settings, then try again."
+            : "Couldn't get your location. Check that location services are on, then try again."
+        );
+      },
+      { enableHighAccuracy: true, maximumAge: 5_000 }
+    );
+    // GPS may not report while standing still; resend the last fix so the cook
+    // and customer don't see the location go stale.
+    const heartbeat = setInterval(() => void send(), LOCATION_SEND_MS);
+
+    // Keep the screen on while sharing. The browser drops the lock whenever
+    // the page is hidden, so take it again on return. Unsupported → no-op.
+    const acquireWakeLock = async () => {
+      try {
+        if (stopped || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+        const lock = await navigator.wakeLock.request("screen");
+        if (stopped) void lock.release();
+        else wakeLock = lock;
+      } catch {
+        // Unsupported or refused (e.g. battery saver) — sharing still works.
+      }
+    };
+    const onVisible = () => void acquireWakeLock();
+    void acquireWakeLock();
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      stopped = true;
+      navigator.geolocation.clearWatch(watchId);
+      clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", onVisible);
+      void wakeLock?.release().catch(() => {});
+      void removeRow();
+    };
+  }, [sharing, deliveryRequestId, riderId]);
+
+  function toggle() {
+    if (sharing) {
+      setSharing(false);
+      return;
+    }
+    setShareError(null);
+    if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+      setShareError("This browser can't share your location.");
+      return;
+    }
+    // watchPosition triggers the browser's permission prompt.
+    setSharing(true);
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border p-3" style={{ borderColor: "#E8DFFF", background: "#FFFFFF" }}>
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={`share-location-${deliveryRequestId}`} className="text-sm font-bold" style={{ color: "var(--kb-ink)" }}>
+          Share my live location
+        </label>
+        <button
+          id={`share-location-${deliveryRequestId}`}
+          type="button"
+          role="switch"
+          aria-checked={sharing}
+          onClick={toggle}
+          className="relative h-7 w-12 shrink-0 rounded-full transition-colors"
+          style={{ background: sharing ? "var(--kb-purple)" : "#D9D6E0" }}
+        >
+          <span
+            className="absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all"
+            style={{ left: sharing ? "1.5rem" : "0.25rem" }}
+          />
+        </button>
+      </div>
+      <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+        Keep this app open and your screen on while sharing. Only the cook and customer for this order can see you, and only while this is on.
+      </p>
+      {sharing && (
+        <p className="mt-1.5 text-xs font-semibold" style={{ color: "var(--kb-purple)" }}>
+          Sharing your location…
+        </p>
+      )}
+      {shareError && (
+        <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ background: "#FEF0F0", color: "#B42318" }}>
+          {shareError}
+        </p>
+      )}
+    </div>
+  );
 }
