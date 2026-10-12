@@ -34,6 +34,12 @@ export interface Order {
   paid_at: string | null;
   ready_at: string | null;
   created_at: string;
+  // PayNow screenshot the customer uploads (key in the private
+  // "payment-proofs" bucket). The cook "rejects" a proof by stamping
+  // payment_proof_rejected_at; a newer upload supersedes that rejection.
+  payment_proof_path: string | null;
+  payment_proof_uploaded_at: string | null;
+  payment_proof_rejected_at: string | null;
 }
 
 export interface OrderWithItems extends Order {
