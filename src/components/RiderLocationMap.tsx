@@ -25,6 +25,11 @@ const POLL_MS = 15_000;
 // Leaflet draws paths as SVG attributes, which can't read CSS variables.
 const PURPLE = "#7B3FE4";
 
+// Same rule riderIcon uses to mirror the scooter (heading west).
+function facesWest(heading: number | null) {
+  return heading !== null && heading > 180 && heading < 360;
+}
+
 function agoLabel(ms: number) {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s ago`;
@@ -46,10 +51,11 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
   const leafletRef = useRef<typeof Leaflet | null>(null);
   const markerRef = useRef<Marker | null>(null);
   const accuracyRef = useRef<Circle | null>(null);
+  // "stale|west" for the icon currently on the marker, so it's only rebuilt
+  // (restarting the pulse) when its look changes.
+  const iconKeyRef = useRef("");
   const locationRef = useRef<RiderLiveLocation | null>(null);
-  useEffect(() => {
-    locationRef.current = location;
-  });
+  const staleRef = useRef(false);
 
   // Load the row, then follow it over realtime (plus a slow poll).
   useEffect(() => {
@@ -105,11 +111,16 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
   const updatedMs = location ? new Date(location.updated_at).getTime() : NaN;
   const live = location !== null && Number.isFinite(updatedMs) && now - updatedMs <= STALE_MS;
   const stale = location !== null && !live;
+  const hasRow = location !== null;
+  useEffect(() => {
+    locationRef.current = location;
+    staleRef.current = stale;
+  });
 
-  // Create the map only while there's something live to show. Leaflet touches
+  // Create the map while there's a row to show, live or stale. Leaflet touches
   // `window` on import, so it's loaded here rather than at module level.
   useEffect(() => {
-    if (!live || !containerRef.current) return;
+    if (!hasRow || !containerRef.current) return;
     let disposed = false;
 
     void import("leaflet").then((L) => {
@@ -129,8 +140,11 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
         fillColor: PURPLE,
         fillOpacity: 0.12,
       }).addTo(map);
+      const heading = start.heading === null ? null : Number(start.heading);
+      const startStale = staleRef.current;
+      iconKeyRef.current = `${startStale}|${facesWest(heading)}`;
       markerRef.current = L.marker(pos, {
-        icon: riderIcon(L, { heading: start.heading, stale: false }),
+        icon: riderIcon(L, { heading, stale: startStale }),
         keyboard: false,
       })
         .bindTooltip("Rider")
@@ -145,8 +159,9 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
       mapRef.current = null;
       markerRef.current = null;
       accuracyRef.current = null;
+      iconKeyRef.current = "";
     };
-  }, [live]);
+  }, [hasRow]);
 
   // Move the pin (and refresh its heading / stale look) as updates arrive.
   useEffect(() => {
@@ -155,7 +170,12 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
     if (!map || !L || !location) return;
     const pos: [number, number] = [Number(location.lat), Number(location.lng)];
     const heading = location.heading === null ? null : Number(location.heading);
-    markerRef.current?.setLatLng(pos).setIcon(riderIcon(L, { heading, stale }));
+    markerRef.current?.setLatLng(pos);
+    const iconKey = `${stale}|${facesWest(heading)}`;
+    if (iconKey !== iconKeyRef.current) {
+      iconKeyRef.current = iconKey;
+      markerRef.current?.setIcon(riderIcon(L, { heading, stale }));
+    }
     accuracyRef.current?.setLatLng(pos).setRadius(Number(location.accuracy_m ?? 0));
     if (!map.getBounds().contains(pos)) map.panTo(pos);
   }, [location, stale]);
@@ -164,11 +184,20 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
     <div className="overflow-hidden rounded-2xl border bg-white" style={{ borderColor: "#E8DFFF", color: "var(--kb-ink)" }}>
       {!loaded ? (
         <p className="p-3 text-center text-xs" style={{ color: "var(--kb-ink-soft)" }}>Loading rider location…</p>
-      ) : live ? (
+      ) : hasRow ? (
         <>
+          {stale && (
+            <p className="px-3 py-2 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
+              Rider&apos;s location hasn&apos;t updated for {Math.max(2, Math.floor((now - updatedMs) / 60_000))} min. Last
+              seen at the spot shown.
+            </p>
+          )}
           <div ref={containerRef} className="h-56 w-full sm:h-64" style={{ isolation: "isolate" }} aria-label="Map of the rider's live location" />
-          <p className="flex items-center gap-2 px-3 py-2 text-xs font-semibold" style={{ color: "var(--kb-purple)" }}>
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: PURPLE }} />
+          <p
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold"
+            style={{ color: stale ? "var(--kb-ink-soft)" : "var(--kb-purple)" }}
+          >
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: stale ? "#9CA3AF" : PURPLE }} />
             Rider location updated {agoLabel(now - updatedMs)}
           </p>
         </>
