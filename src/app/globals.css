@@ -322,3 +322,10 @@ body {
 .partner-dashboard button:disabled {
   cursor: not-allowed;
 }
+
+/* Live rider marker on RiderLocationMap (Leaflet divIcon, see src/lib/riderIcon.ts) */
+.kb-rider { position: relative; width: 52px; height: 52px; filter: drop-shadow(0 3px 6px rgba(34,22,56,.35)); }
+.kb-rider__icon { position: relative; z-index: 1; transition: transform .2s; }
+.kb-rider__pulse { position: absolute; inset: 4px; border-radius: 9999px; background: rgba(124,58,237,.35); animation: kb-rider-pulse 1.8s ease-out infinite; }
+.kb-rider--stale .kb-rider__icon { filter: grayscale(1) opacity(.6); }
+@keyframes kb-rider-pulse { 0% { transform: scale(.8); opacity: .8; } 100% { transform: scale(1.7); opacity: 0; } }

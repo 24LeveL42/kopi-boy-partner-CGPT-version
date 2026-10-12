@@ -2,8 +2,10 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
-import type { CircleMarker, Circle, Map as LeafletMap } from "leaflet";
+import type * as Leaflet from "leaflet";
+import type { Marker, Circle, Map as LeafletMap } from "leaflet";
 import { createClient } from "@/lib/supabase/client";
+import { riderIcon } from "@/lib/riderIcon";
 
 interface RiderLiveLocation {
   delivery_request_id: string;
@@ -41,7 +43,8 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
-  const markerRef = useRef<CircleMarker | null>(null);
+  const leafletRef = useRef<typeof Leaflet | null>(null);
+  const markerRef = useRef<Marker | null>(null);
   const accuracyRef = useRef<Circle | null>(null);
   const locationRef = useRef<RiderLiveLocation | null>(null);
   useEffect(() => {
@@ -101,6 +104,7 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
 
   const updatedMs = location ? new Date(location.updated_at).getTime() : NaN;
   const live = location !== null && Number.isFinite(updatedMs) && now - updatedMs <= STALE_MS;
+  const stale = location !== null && !live;
 
   // Create the map only while there's something live to show. Leaflet touches
   // `window` on import, so it's loaded here rather than at module level.
@@ -125,15 +129,13 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
         fillColor: PURPLE,
         fillOpacity: 0.12,
       }).addTo(map);
-      markerRef.current = L.circleMarker(pos, {
-        radius: 9,
-        color: "#FFFFFF",
-        weight: 3,
-        fillColor: PURPLE,
-        fillOpacity: 1,
+      markerRef.current = L.marker(pos, {
+        icon: riderIcon(L, { heading: start.heading, stale: false }),
+        keyboard: false,
       })
         .bindTooltip("Rider")
         .addTo(map);
+      leafletRef.current = L;
       mapRef.current = map;
     });
 
@@ -146,15 +148,17 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
     };
   }, [live]);
 
-  // Move the pin as updates arrive.
+  // Move the pin (and refresh its heading / stale look) as updates arrive.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !location) return;
+    const L = leafletRef.current;
+    if (!map || !L || !location) return;
     const pos: [number, number] = [Number(location.lat), Number(location.lng)];
-    markerRef.current?.setLatLng(pos);
+    const heading = location.heading === null ? null : Number(location.heading);
+    markerRef.current?.setLatLng(pos).setIcon(riderIcon(L, { heading, stale }));
     accuracyRef.current?.setLatLng(pos).setRadius(Number(location.accuracy_m ?? 0));
     if (!map.getBounds().contains(pos)) map.panTo(pos);
-  }, [location]);
+  }, [location, stale]);
 
   return (
     <div className="overflow-hidden rounded-2xl border bg-white" style={{ borderColor: "#E8DFFF", color: "var(--kb-ink)" }}>
