@@ -9,7 +9,16 @@ v4, same design tokens as Kopi Boy Customer and Kopi Boy HQ.
 npm install
 npm run dev   # http://localhost:3000
 npm run build
+npm test      # unit tests (Node's built-in test runner)
 ```
+
+### Environment variables
+Optional:
+
+- `ONEMAP_TOKEN` — OneMap API token, sent as the `Authorization` header when
+  the kitchen setup form geocodes a postal code
+  (`src/lib/geocode.ts`). Not required: OneMap's search currently answers
+  without one. Server-only — never prefix it with `NEXT_PUBLIC_`.
 
 ## Current status: Feature #003 — Auth + roles done, cook kitchen/menu setup done
 

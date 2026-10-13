@@ -11,6 +11,7 @@ import { useBackHandler, useCancelHandler } from "./AppChrome";
 import type { Kitchen, MenuItem, MerchantCategory, CuisineType, PaynowType } from "@/lib/types-kitchen";
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
+import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen-location-actions";
 
 const PAYNOW_TYPES: { id: PaynowType; label: string }[] = [
   { id: "mobile", label: "PayNow Mobile Number" },
@@ -36,7 +37,21 @@ function emptyItem(): DraftItem {
   return { key: crypto.randomUUID(), name: "", price: "", photo_url: "", photoUploading: false };
 }
 
-type LocationStatus = "idle" | "locating" | "success" | "denied" | "unavailable" | "unsupported";
+// Failed postal lookups block saving — a wrong kitchen position gives
+// customers wrong distances, so we'd rather not save one at all.
+function postalLookupError(result: KitchenPostalLookup): string | null {
+  if (result.ok) return null;
+  switch (result.reason) {
+    case "invalid":
+      return "Postal code must be 6 digits (e.g. 310123).";
+    case "not_found":
+      return "We couldn't find that postal code. Please check it.";
+    case "unavailable":
+      return "Postal code lookup is temporarily unavailable. Please try again in a minute.";
+    case "signed_out":
+      return "Your session has expired. Please sign in again.";
+  }
+}
 
 // Supabase errors (Postgrest, Storage, or a raw fetch/network throw) don't
 // share one shape, and `.message` is sometimes empty even when `.details`/
@@ -84,9 +99,10 @@ export function KitchenSetupForm({
   const [heroUploading, setHeroUploading] = useState(false);
   const [paynowType, setPaynowType] = useState<PaynowType>(existingKitchen?.paynow_type ?? "mobile");
   const [paynowValue, setPaynowValue] = useState(existingKitchen?.paynow_value ?? "");
-  const [latitude, setLatitude] = useState<number | null>(defaults.latitude);
-  const [longitude, setLongitude] = useState<number | null>(defaults.longitude);
-  const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
+  // Address OneMap found for the last checked postal code, shown so the
+  // cook can confirm it's their kitchen.
+  const [foundAddress, setFoundAddress] = useState<{ postal: string; address: string } | null>(null);
+  const [postalError, setPostalError] = useState<string | null>(null);
   // Once acknowledged it stays acknowledged (the DB keeps the first
   // timestamp — schema section 33), so the box only gates kitchens that
   // haven't ticked it yet, including ones set up before it existed.
@@ -97,7 +113,7 @@ export function KitchenSetupForm({
       ? existingItems.map((i) => ({ key: i.id, name: i.name, price: String(i.price), photo_url: i.photo_url ?? "", photoUploading: false }))
       : [emptyItem()]
   );
-  const { busy: loading, run, startTransition } = usePendingAction();
+  const { busy: loading, isRunning, run, startTransition } = usePendingAction();
   const [error, setError] = useState<string | null>(null);
   // Set on the first edit of any field — decides whether leaving needs a
   // "discard?" confirmation.
@@ -166,28 +182,26 @@ export function KitchenSetupForm({
     }
   }
 
-  // Optional — purely additive alongside the address fields. Never
-  // blocks kitchen setup: every failure path (no browser support, denied
-  // permission, position unavailable/timeout) just resets to a message and
-  // leaves latitude/longitude null.
-  function handleUseCurrentLocation() {
-    setError(null);
-    if (!("geolocation" in navigator)) {
-      setLocationStatus("unsupported");
+  // The kitchen's coordinates come only from its postal code (geocoded on
+  // the server), never from the cook's device GPS — a phone's position at
+  // the moment of saving isn't necessarily where the kitchen is.
+  function handleCheckPostalCode() {
+    setPostalError(null);
+    setFoundAddress(null);
+    if (!isValidPostalCode(postalCode)) {
+      setPostalError("Postal code must be 6 digits (e.g. 310123).");
       return;
     }
-    setLocationStatus("locating");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLatitude(position.coords.latitude);
-        setLongitude(position.coords.longitude);
-        setLocationStatus("success");
-      },
-      (geoError) => {
-        setLocationStatus(geoError.code === geoError.PERMISSION_DENIED ? "denied" : "unavailable");
-      },
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 5 * 60_000 }
-    );
+    const postal = postalCode.trim();
+    run("postal", async () => {
+      try {
+        const result = await lookupKitchenPostalCode(postal);
+        if (result.ok) setFoundAddress({ postal, address: result.address });
+        else setPostalError(postalLookupError(result));
+      } catch {
+        setPostalError(postalLookupError({ ok: false, reason: "unavailable" }));
+      }
+    });
   }
 
   function updateItem(key: string, patch: Partial<DraftItem>) {
@@ -231,6 +245,16 @@ export function KitchenSetupForm({
 
     run("save", async () => {
       try {
+        // Geocode before writing anything, so a failed lookup never leaves a
+        // half-saved kitchen or a wrong position behind.
+        const postal = postalCode.trim();
+        const location = await lookupKitchenPostalCode(postal);
+        if (!location.ok) {
+          setError(postalLookupError(location));
+          return;
+        }
+        setFoundAddress({ postal, address: location.address });
+
         const { error: kitchenError } = await supabase.from("kitchens").upsert({
           id: userId,
           business_name: businessName.trim(),
@@ -256,9 +280,9 @@ export function KitchenSetupForm({
         const { error: addressError } = await supabase.from("kitchen_addresses").upsert({
           kitchen_id: userId,
           business_address: businessAddress.trim(),
-          postal_code: postalCode.trim(),
-          latitude,
-          longitude,
+          postal_code: postal,
+          latitude: location.lat,
+          longitude: location.lng,
         });
         if (addressError) throw addressError;
 
@@ -377,7 +401,10 @@ export function KitchenSetupForm({
             <Field label="Postal Code">
               <input
                 value={postalCode}
-                onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                onChange={(e) => {
+                  setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  setPostalError(null);
+                }}
                 required
                 placeholder="e.g. 310123"
                 inputMode="numeric"
@@ -387,37 +414,29 @@ export function KitchenSetupForm({
                 className="kb-input"
               />
             </Field>
-            <Field label="Precise location (optional)">
+            <div>
               <button
                 type="button"
-                onClick={handleUseCurrentLocation}
-                disabled={locationStatus === "locating"}
+                onClick={handleCheckPostalCode}
+                disabled={loading}
                 className="kb-btn-secondary w-full py-3 text-sm"
               >
-                <PendingLabel pending={locationStatus === "locating"} pendingText="Getting your location…">Use my current location</PendingLabel>
+                <PendingLabel pending={isRunning("postal")} pendingText="Checking postal code…">Check postal code</PendingLabel>
               </button>
-              {locationStatus === "success" && latitude != null && longitude != null && (
+              {foundAddress && foundAddress.postal === postalCode.trim() && (
                 <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                  Location captured ({latitude.toFixed(5)}, {longitude.toFixed(5)}).
+                  Found: <span className="font-semibold" style={{ color: "var(--kb-ink)" }}>{foundAddress.address}</span>
                 </p>
               )}
-              {locationStatus === "denied" && (
-                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                  Location permission was denied — that&apos;s fine, your address above is still used. You
-                  can allow location access in your browser settings and try again any time.
+              {postalError && (
+                <p className="mt-1 text-xs" style={{ color: "var(--kb-danger)" }}>
+                  {postalError}
                 </p>
               )}
-              {locationStatus === "unavailable" && (
-                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                  Couldn&apos;t get your location right now — no problem, this is optional and you can try again later.
-                </p>
-              )}
-              {locationStatus === "unsupported" && (
-                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                  Your browser doesn&apos;t support location detection — no problem, this is optional.
-                </p>
-              )}
-            </Field>
+              <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                Your kitchen&apos;s location on the map comes from this postal code.
+              </p>
+            </div>
             <Field label="Description (optional)">
               <textarea
                 value={description}
@@ -554,7 +573,7 @@ export function KitchenSetupForm({
             disabled={loading || !acknowledged || heroUploading || items.some((it) => it.photoUploading)}
             className="kb-btn-primary w-full py-3.5 text-[15px]"
           >
-            <PendingLabel pending={loading} pendingText={isEdit ? "Saving changes…" : "Going live…"}>
+            <PendingLabel pending={isRunning("save")} pendingText={isEdit ? "Saving changes…" : "Going live…"}>
               {isEdit ? "Save changes" : "Go live"}
             </PendingLabel>
           </button>
