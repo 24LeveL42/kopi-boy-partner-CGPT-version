@@ -1,6 +1,6 @@
 import type { Profile, CookApplication, RiderApplication, PickerApplication } from "./types-auth";
 import type { Kitchen, MerchantCategory } from "./types-kitchen";
-import { categoryForBusinessType } from "./kitchen-profile";
+import { categoryForBusinessType } from "./kitchen-profile.ts";
 
 /**
  * Everything the signed-in home route (`/`) needs to decide which screen to

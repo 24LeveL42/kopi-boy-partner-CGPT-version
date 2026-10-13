@@ -11,6 +11,7 @@ import { PendingLabel } from "@/components/Pending";
 import { SkeletonCards } from "@/components/Skeleton";
 import { ORDER_CHAT_PHOTO_TYPES, uploadOrderChatPhoto, validateOrderChatPhoto } from "@/lib/order-chat-photo";
 import { formatKitchenAddress, kitchenMapsUrl, publicKitchenArea, type KitchenLocation } from "@/lib/kitchen-profile";
+import { acceptDelivery, completeDelivery } from "@/lib/rider-delivery-actions";
 
 interface RawRow {
   id: string;
@@ -136,13 +137,10 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
   function accept(requestId: string) {
     run(`${requestId}:accept`, async () => {
       setError(null);
-      const { error: acceptError } = await supabase
-        .from("delivery_requests")
-        .update({ rider_id: riderId, status: "accepted", accepted_at: new Date().toISOString() })
-        .eq("id", requestId)
-        .eq("status", "open"); // first to accept wins — a second rider's update matches 0 rows
-      if (acceptError) {
-        setError(acceptError.message);
+      // Server action: refuses a blocked rider even from a stale page.
+      const result = await acceptDelivery(requestId);
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
       await load(true);
@@ -201,12 +199,9 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
         setProofPath(path);
       }
 
-      const { error: deliveredError } = await supabase.rpc("complete_delivery_with_proof", {
-        p_request_id: delivery.id,
-        p_photo_path: path,
-      });
-      if (deliveredError) {
-        setError(`${deliveredError.message} The delivery is not marked delivered yet.`);
+      const result = await completeDelivery(delivery.id, path);
+      if (!result.ok) {
+        setError(result.blocked ? result.error : `${result.error} The delivery is not marked delivered yet.`);
         return;
       }
       closeProof();

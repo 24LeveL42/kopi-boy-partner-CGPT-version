@@ -34,7 +34,8 @@ export default async function RequestPickerPage() {
     .eq("id", user.id)
     .single<Profile>();
 
-  if (!profile || profile.role !== "rider") redirect("/");
+  // Blocked riders get the blocked screen on "/" instead.
+  if (!profile || profile.role !== "rider" || !profile.is_active) redirect("/");
 
   const [{ data: kitchens }, { data: requests }] = await Promise.all([
     supabase.from("kitchens").select("id, business_name, postal_sector").eq("is_live", true),

@@ -5,6 +5,8 @@ import { StatusScreen } from "@/components/StatusScreen";
 import { PartnerShell } from "@/components/PartnerShell";
 import { KitchenSetupGate } from "@/components/KitchenSetupGate";
 import { PickerShell } from "@/components/PickerShell";
+import { AdminMessagePanel } from "@/components/AdminMessagePanel";
+import { BLOCKED_SCREEN_COPY } from "@/lib/admin-messages";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
 import type { Profile, CookApplication, RiderApplication, PickerApplication } from "@/lib/types-auth";
 import type { Kitchen } from "@/lib/types-kitchen";
@@ -51,13 +53,12 @@ export default async function Home() {
 
   switch (screen.kind) {
     case "blocked":
+      // Replaces the whole cook / rider / picker area. No block reason is
+      // stored, so none is shown — the partner asks HQ through the box below.
       return (
-        <StatusScreen
-          tone="danger"
-          signOut
-          title="Account temporarily blocked"
-          message="Your partner account has been temporarily blocked. Contact Kopi Boy support for details."
-        />
+        <StatusScreen tone="warning" signOut title={BLOCKED_SCREEN_COPY.title} message={BLOCKED_SCREEN_COPY.body}>
+          <AdminMessagePanel userId={user.id} />
+        </StatusScreen>
       );
     case "application-pending":
       return (

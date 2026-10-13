@@ -19,7 +19,8 @@ export default async function KitchenPage() {
     .eq("id", user.id)
     .single<Profile>();
 
-  if (!profile || profile.role !== "cook") redirect("/");
+  // Blocked cooks get the blocked screen on "/" instead of their kitchen.
+  if (!profile || profile.role !== "cook" || !profile.is_active) redirect("/");
 
   const [{ data: kitchen }, { data: address }, { data: items }] = await Promise.all([
     supabase.from("kitchens").select("*").eq("id", user.id).maybeSingle<Kitchen>(),
