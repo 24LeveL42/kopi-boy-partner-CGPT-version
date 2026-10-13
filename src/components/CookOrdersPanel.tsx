@@ -40,6 +40,16 @@ function proofState(order: Order): ProofState {
   return uploaded > rejected ? "current" : "rejected";
 }
 
+// The Customer app asks for subtotal + delivery fee by PayNow, so the total
+// is what the cook should look for in their bank app.
+function deliveryFee(order: Order) {
+  return Number(order.delivery_fee_estimate ?? 0);
+}
+
+function orderTotal(order: Order) {
+  return Number(order.subtotal) + deliveryFee(order);
+}
+
 function timeAgo(iso: string) {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   if (s < 60) return "just now";
@@ -254,9 +264,10 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
               <div key={o.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold">Order #{shortId(o.id)}</p>
-                  <p className="text-sm font-semibold">${o.subtotal.toFixed(2)}</p>
+                  <p className="text-sm font-semibold">S${orderTotal(o).toFixed(2)}</p>
                 </div>
                 <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                <OrderAmounts order={o} />
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => decide(o.id, "accepted")}
@@ -304,10 +315,11 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-ink-soft)" }}>You should receive</p>
-                      <p className="text-base font-bold" style={{ color: "var(--kb-purple)" }}>${o.subtotal.toFixed(2)}</p>
+                      <p className="text-base font-bold" style={{ color: "var(--kb-purple)" }}>S${orderTotal(o).toFixed(2)}</p>
                     </div>
                   </div>
                   <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                  <OrderAmounts order={o} />
 
                   {proof === "current" && (
                     <div className="mt-3 flex items-center gap-3 rounded-xl p-2" style={{ background: "var(--kb-tint)" }}>
@@ -361,7 +373,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                     )}
                   </div>
                   <p className="mt-2 text-[11px]" style={{ color: "var(--kb-ink-soft)" }}>
-                    Check your bank app first. Only tap Payment received if the money is in your account.
+                    Check your bank app for the full total of S${orderTotal(o).toFixed(2)}. Only tap Payment received if that amount is in your account.
                   </p>
                 </div>
               );
@@ -384,9 +396,10 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
               <div key={o.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-semibold">Order #{shortId(o.id)}</p>
-                  <p className="text-sm font-semibold">${o.subtotal.toFixed(2)}</p>
+                  <p className="text-sm font-semibold">S${orderTotal(o).toFixed(2)}</p>
                 </div>
                 <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                <OrderAmounts order={o} />
                 {o.preparation_status === "not_started" && (
                   <button
                     onClick={() => startCooking(o.id)}
@@ -508,4 +521,24 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
 function Metric({ label, value, tone }: { label: string; value: number; tone: "purple" | "teal" | "neutral" }) {
   const colors = tone === "purple" ? ["#F1EDFA", "var(--kb-purple)"] : tone === "teal" ? ["#E5F7EF", "var(--kb-green-deep)"] : ["#F5F4F7", "var(--kb-ink)"];
   return <div className="rounded-2xl border border-[#eceaf1] p-3 sm:p-4" style={{ background: colors[0] }}><span className="block text-xl font-bold sm:text-2xl" style={{ color: colors[1] }}>{value}</span><span className="mt-1 block text-[10px] font-semibold leading-tight sm:text-xs" style={{ color: "var(--kb-ink-soft)" }}>{label}</span></div>;
+}
+
+function OrderAmounts({ order }: { order: Order }) {
+  return (
+    <div className="mt-3 rounded-xl p-3 text-xs" style={{ background: "var(--kb-field)" }}>
+      <div className="flex justify-between" style={{ color: "var(--kb-ink-soft)" }}>
+        <span>Food subtotal</span>
+        <span>S${Number(order.subtotal).toFixed(2)}</span>
+      </div>
+      <div className="mt-1 flex justify-between" style={{ color: "var(--kb-ink-soft)" }}>
+        <span>Delivery fee</span>
+        <span>S${deliveryFee(order).toFixed(2)}</span>
+      </div>
+      <p className="text-[11px]" style={{ color: "var(--kb-ink-soft)" }}>You pay this fee to the rider at pickup.</p>
+      <div className="mt-2 flex justify-between border-t pt-2 text-sm font-bold" style={{ borderColor: "#E8DFFF", color: "var(--kb-ink)" }}>
+        <span>Customer pays in total</span>
+        <span style={{ color: "var(--kb-purple)" }}>S${orderTotal(order).toFixed(2)}</span>
+      </div>
+    </div>
+  );
 }

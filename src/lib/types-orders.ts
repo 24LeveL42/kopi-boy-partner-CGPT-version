@@ -30,6 +30,9 @@ export interface Order {
   payment_status: PaymentStatus;
   preparation_status: PreparationStatus;
   subtotal: number;
+  // Rider fee quoted to the customer at checkout. The customer PayNows the
+  // cook subtotal + this fee; the cook hands the fee to the rider at pickup.
+  delivery_fee_estimate: number | null;
   decided_at: string | null;
   paid_at: string | null;
   ready_at: string | null;
