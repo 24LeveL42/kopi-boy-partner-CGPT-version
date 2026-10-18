@@ -12,6 +12,8 @@ import { SkeletonCards } from "@/components/Skeleton";
 import { ORDER_CHAT_PHOTO_TYPES, uploadOrderChatPhoto, validateOrderChatPhoto } from "@/lib/order-chat-photo";
 import { formatKitchenAddress, kitchenMapsUrl, publicKitchenArea, type KitchenLocation } from "@/lib/kitchen-profile";
 import { acceptDelivery, completeDelivery } from "@/lib/rider-delivery-actions";
+import { loadDeliveryOrderDetails, type OrderDeliveryDetails } from "@/lib/order-delivery";
+import { OrderDeliveryInfo } from "@/components/OrderDeliveryInfo";
 
 interface RawRow {
   id: string;
@@ -30,7 +32,7 @@ function shortId(id: string) {
 }
 
 // location is only ever passed for the rider's own accepted delivery.
-function toRow(r: RawRow, location?: KitchenLocation | null): DeliveryRequestWithKitchen {
+function toRow(r: RawRow, delivery: OrderDeliveryDetails | null, location?: KitchenLocation | null): DeliveryRequestWithKitchen {
   return {
     id: r.id,
     order_id: r.order_id,
@@ -43,6 +45,7 @@ function toRow(r: RawRow, location?: KitchenLocation | null): DeliveryRequestWit
     kitchen_business_name: r.kitchens?.business_name ?? "Unknown kitchen",
     kitchen_address: (location && formatKitchenAddress(location)) || publicKitchenArea(r.kitchens?.postal_sector),
     kitchen_maps_url: location ? kitchenMapsUrl(location) : null,
+    delivery,
   };
 }
 
@@ -96,10 +99,11 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       // The exact address/postal code/coordinates are private; the DB hands
       // them over only while this rider holds the accepted delivery (schema
       // section 30). If that call fails, the card shows the postal sector.
-      const { data: location } = await supabase
-        .rpc("get_delivery_kitchen_location", { p_delivery_request_id: mine.id })
-        .maybeSingle<KitchenLocation>();
-      setMyDelivery(toRow(mine, location));
+      const [{ data: location }, details] = await Promise.all([
+        supabase.rpc("get_delivery_kitchen_location", { p_delivery_request_id: mine.id }).maybeSingle<KitchenLocation>(),
+        loadDeliveryOrderDetails(supabase, [mine.id]),
+      ]);
+      setMyDelivery(toRow(mine, details?.[mine.id] ?? null, location));
       setOpenRequests([]);
       setLoading(false);
       return;
@@ -120,7 +124,11 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       return;
     }
 
-    setOpenRequests((open ?? []).map((r) => toRow(r)));
+    // Open jobs only get the drop-off area, Express and the requested time —
+    // the address, unit and notes arrive once the rider accepts.
+    const rows = open ?? [];
+    const details = await loadDeliveryOrderDetails(supabase, rows.map((r) => r.id));
+    setOpenRequests(rows.map((r) => toRow(r, details?.[r.id] ?? null)));
     setLoading(false);
   }, [supabase, riderId]);
 
@@ -249,6 +257,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
             </a>
           )}
           <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>Order #{shortId(myDelivery.order_id)}</p>
+          {myDelivery.delivery && <OrderDeliveryInfo details={myDelivery.delivery} />}
           <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ color: "var(--kb-ink-soft)", background: "#F7F6FA" }}>
             Collect from the cook and coordinate the customer handoff with them. Agree the delivery fee directly with the cook.
           </p>
@@ -369,6 +378,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
                   <p className="text-sm font-semibold">{r.kitchen_business_name}</p>
                   <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{r.kitchen_address}</p>
                   <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>Order #{shortId(r.order_id)}</p>
+                  {r.delivery && <OrderDeliveryInfo details={r.delivery} />}
                   <button
                     onClick={() => accept(r.id)}
                     disabled={busy}

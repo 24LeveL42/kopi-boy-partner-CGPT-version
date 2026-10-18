@@ -9,6 +9,8 @@
  * combined enum — never collapse them back into a single status.
  */
 
+import type { OrderDeliveryDetails } from "./order-delivery";
+
 export type OrderStatus = "placed" | "accepted" | "rejected" | "cancelled";
 export type PaymentStatus = "unpaid" | "paid";
 export type PreparationStatus = "not_started" | "preparing" | "ready";
@@ -22,7 +24,10 @@ export interface OrderItem {
   quantity: number;
 }
 
-export interface Order {
+// The delivery fields (delivery_type, scheduled_for, address snapshot,
+// customer_postal_code) come from OrderDeliveryDetails, all optional because
+// older orders don't have them.
+export interface Order extends OrderDeliveryDetails {
   id: string;
   customer_id: string;
   kitchen_id: string;

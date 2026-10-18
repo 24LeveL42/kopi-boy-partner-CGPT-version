@@ -10,6 +10,7 @@ import type { Order, OrderWithItems } from "@/lib/types-orders";
 import type { DeliveryRequest, DeliveryRiderDetails } from "@/lib/types-delivery";
 import { PartnerRiderChat } from "./PartnerRiderChat";
 import { RiderLocationMap } from "./RiderLocationMap";
+import { OrderDeliveryInfo } from "./OrderDeliveryInfo";
 
 interface OrderWithDelivery extends OrderWithItems {
   delivery_requests: DeliveryRequest[];
@@ -267,6 +268,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                   <p className="text-sm font-semibold">S${orderTotal(o).toFixed(2)}</p>
                 </div>
                 <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                <OrderDeliveryInfo details={o} />
                 <OrderAmounts order={o} />
                 <div className="mt-3 flex gap-2">
                   <button
@@ -319,6 +321,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                     </div>
                   </div>
                   <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                  <OrderDeliveryInfo details={o} />
                   <OrderAmounts order={o} />
 
                   {proof === "current" && (
@@ -399,6 +402,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                   <p className="text-sm font-semibold">S${orderTotal(o).toFixed(2)}</p>
                 </div>
                 <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                <OrderDeliveryInfo details={o} />
                 <OrderAmounts order={o} />
                 {o.preparation_status === "not_started" && (
                   <button

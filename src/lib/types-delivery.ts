@@ -6,6 +6,8 @@
  * pickup_requests.
  */
 
+import type { OrderDeliveryDetails } from "./order-delivery";
+
 export type DeliveryRequestStatus = "open" | "accepted" | "completed" | "cancelled" | "release_requested";
 
 export interface DeliveryRequest {
@@ -27,6 +29,12 @@ export interface DeliveryRequestWithKitchen extends DeliveryRequest {
   kitchen_address: string;
   /** Only set for the viewer's own accepted request. */
   kitchen_maps_url: string | null;
+  /**
+   * Drop-off details from get_delivery_order_details: area/type/time on an
+   * open job, plus address, unit and notes once it's the viewer's. Null when
+   * they couldn't be loaded.
+   */
+  delivery: OrderDeliveryDetails | null;
 }
 
 
