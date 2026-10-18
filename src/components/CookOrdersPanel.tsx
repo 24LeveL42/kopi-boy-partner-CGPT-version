@@ -478,6 +478,11 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                                 </div>
                               </div>
                             </div>
+                            {active.picked_up_at && (
+                              <p className="border-t px-3 py-2 text-center text-xs font-bold" style={{ borderColor: "#E8DFFF", background: "#E5F7EF", color: "var(--kb-green-deep)" }}>
+                                ✓ Rider has collected the food
+                              </p>
+                            )}
                             <div className="grid grid-cols-2 gap-2 border-t p-3" style={{ borderColor: "#E8DFFF" }}>
                               {rider?.phone ? (
                                 <a href={`tel:${rider.phone}`} className="flex items-center justify-center rounded-xl bg-white py-2.5 text-xs font-bold" style={{ color: "var(--kb-purple)" }}>

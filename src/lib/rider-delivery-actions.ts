@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { acceptDeliveryAs, completeDeliveryAs, type RiderActionResult } from "@/lib/rider-delivery";
+import { acceptDeliveryAs, completeDeliveryAs, markCollectedAs, type RiderActionResult } from "@/lib/rider-delivery";
 
 const SIGNED_OUT: RiderActionResult = { ok: false, error: "You're signed out. Please sign in again." };
 
@@ -21,6 +21,10 @@ async function asSignedInRider(work: (supabase: Awaited<ReturnType<typeof create
 
 export async function acceptDelivery(requestId: string): Promise<RiderActionResult> {
   return asSignedInRider((supabase, userId) => acceptDeliveryAs(supabase, userId, String(requestId ?? "")));
+}
+
+export async function markCollected(requestId: string): Promise<RiderActionResult> {
+  return asSignedInRider((supabase, userId) => markCollectedAs(supabase, userId, String(requestId ?? "")));
 }
 
 export async function completeDelivery(requestId: string, photoPath: string): Promise<RiderActionResult> {

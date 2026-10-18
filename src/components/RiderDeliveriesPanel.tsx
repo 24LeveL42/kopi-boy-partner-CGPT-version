@@ -11,7 +11,8 @@ import { PendingLabel } from "@/components/Pending";
 import { SkeletonCards } from "@/components/Skeleton";
 import { ORDER_CHAT_PHOTO_TYPES, uploadOrderChatPhoto, validateOrderChatPhoto } from "@/lib/order-chat-photo";
 import { formatKitchenAddress, kitchenMapsUrl, publicKitchenArea, type KitchenLocation } from "@/lib/kitchen-profile";
-import { acceptDelivery, completeDelivery } from "@/lib/rider-delivery-actions";
+import { acceptDelivery, completeDelivery, markCollected } from "@/lib/rider-delivery-actions";
+import { isCollected } from "@/lib/rider-delivery";
 import { loadDeliveryOrderDetails, type OrderDeliveryDetails } from "@/lib/order-delivery";
 import { OrderDeliveryInfo } from "@/components/OrderDeliveryInfo";
 
@@ -24,6 +25,7 @@ interface RawRow {
   created_at: string;
   accepted_at: string | null;
   completed_at: string | null;
+  picked_up_at?: string | null; // missing until docs/supabase-delivery-pickup.sql runs
   kitchens: { business_name: string; postal_sector: string | null } | null;
 }
 
@@ -42,6 +44,7 @@ function toRow(r: RawRow, delivery: OrderDeliveryDetails | null, location?: Kitc
     created_at: r.created_at,
     accepted_at: r.accepted_at,
     completed_at: r.completed_at,
+    picked_up_at: r.picked_up_at,
     kitchen_business_name: r.kitchens?.business_name ?? "Unknown kitchen",
     kitchen_address: (location && formatKitchenAddress(location)) || publicKitchenArea(r.kitchens?.postal_sector),
     kitchen_maps_url: location ? kitchenMapsUrl(location) : null,
@@ -59,6 +62,8 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
   const { busy, isRunning, run } = usePendingAction();
   // Proof-of-delivery step: "Mark delivered" opens it, and completing needs a photo.
   const [proofOpen, setProofOpen] = useState(false);
+  // "I've collected the food" asks once more before it notifies the customer.
+  const [collectConfirmOpen, setCollectConfirmOpen] = useState(false);
   const [partnerChatOpen, setPartnerChatOpen] = useState(false);
   const [proofPhoto, setProofPhoto] = useState<File | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
@@ -155,6 +160,20 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
     });
   }
 
+  function confirmCollected(requestId: string) {
+    run(`${requestId}:collect`, async () => {
+      setError(null);
+      // Server action: the database stamps the time and re-checks the rider/job.
+      const result = await markCollected(requestId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setCollectConfirmOpen(false);
+      await load(true);
+    });
+  }
+
   const proofPreviewRef = useRef<string | null>(null);
   useEffect(() => () => {
     if (proofPreviewRef.current) URL.revokeObjectURL(proofPreviewRef.current);
@@ -242,7 +261,9 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
           </p>
           <div className="mt-2 flex items-start justify-between gap-3">
             <p className="text-base font-bold">{myDelivery.kitchen_business_name}</p>
-            <span className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide" style={{ background: "#E5F7EF", color: "var(--kb-green-deep)" }}>In progress</span>
+            <span className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide" style={{ background: "#E5F7EF", color: "var(--kb-green-deep)" }}>
+              {isCollected(myDelivery) ? "On the way" : "Go to kitchen"}
+            </span>
           </div>
           <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{myDelivery.kitchen_address}</p>
           {myDelivery.kitchen_maps_url && (
@@ -262,7 +283,49 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
             Collect from the cook and coordinate the customer handoff with them. Agree the delivery fee directly with the cook.
           </p>
           <RiderLocationShare key={myDelivery.id} deliveryRequestId={myDelivery.id} riderId={riderId} />
-          {proofOpen ? (
+          {myDelivery.picked_up_at && (
+            <p className="mt-3 rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: "#E5F7EF", color: "var(--kb-green-deep)" }}>
+              ✓ Food collected at {collectedTime(myDelivery.picked_up_at)}
+            </p>
+          )}
+          {!isCollected(myDelivery) ? (
+            collectConfirmOpen ? (
+              <div className="mt-3 rounded-2xl p-3" style={{ background: "var(--kb-cream)" }}>
+                <p className="text-sm font-semibold">Have you got the food from {myDelivery.kitchen_business_name}?</p>
+                <p className="mt-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                  The customer and the cook will be told you&apos;re on the way. This can&apos;t be undone.
+                </p>
+                <button
+                  onClick={() => confirmCollected(myDelivery.id)}
+                  disabled={busy}
+                  className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold text-white disabled:opacity-60"
+                  style={{ background: "var(--kb-green-deep)" }}
+                >
+                  <PendingLabel pending={isRunning(`${myDelivery.id}:collect`)} pendingText="Saving…">Yes, I have the food</PendingLabel>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCollectConfirmOpen(false)}
+                  disabled={busy}
+                  className="mt-2 w-full text-xs font-semibold disabled:opacity-60"
+                  style={{ color: "var(--kb-ink-soft)" }}
+                >
+                  Not yet
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setError(null);
+                  setCollectConfirmOpen(true);
+                }}
+                className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold text-white"
+                style={{ background: "var(--kb-green-deep)" }}
+              >
+                I&apos;ve collected the food
+              </button>
+            )
+          ) : proofOpen ? (
             <div className="mt-3 rounded-2xl p-3" style={{ background: "var(--kb-cream)" }}>
               <p className="text-sm font-semibold">Proof of delivery</p>
               <p className="mt-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
@@ -404,6 +467,11 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       )}
     </div>
   );
+}
+
+// "6:12 pm", Singapore time.
+function collectedTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-SG", { timeZone: "Asia/Singapore", hour: "numeric", minute: "2-digit" });
 }
 
 function RiderMetric({ label, value, tone }: { label: string; value: number; tone: "purple" | "teal" | "neutral" }) {

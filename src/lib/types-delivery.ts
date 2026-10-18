@@ -19,6 +19,11 @@ export interface DeliveryRequest {
   created_at: string;
   accepted_at: string | null;
   completed_at: string | null;
+  /**
+   * Set when the rider taps "I've collected the food" (status stays
+   * 'accepted'). Undefined if docs/supabase-delivery-pickup.sql hasn't run.
+   */
+  picked_up_at?: string | null;
 }
 
 // Joined shape used by the rider dashboard — pulls in the kitchen name/
