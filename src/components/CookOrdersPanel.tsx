@@ -11,6 +11,8 @@ import type { DeliveryRequest, DeliveryRiderDetails } from "@/lib/types-delivery
 import { PartnerRiderChat } from "./PartnerRiderChat";
 import { RiderLocationMap } from "./RiderLocationMap";
 import { OrderDeliveryInfo } from "./OrderDeliveryInfo";
+import { requestRider as requestRiderAction } from "@/lib/cook-order-actions";
+import { canRequestRiderAt, riderRequestOpensLabel } from "@/lib/rider-request";
 
 interface OrderWithDelivery extends OrderWithItems {
   delivery_requests: DeliveryRequest[];
@@ -75,6 +77,9 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { busy, isRunning, run } = usePendingAction();
+  // Ticks so a scheduled order's "Request a rider" enables on time. Only
+  // drives the button — the server action and the database check the real clock.
+  const [now, setNow] = useState(() => Date.now());
 
   // `silent` = live refresh: update in place without flashing the loading state.
   const load = useCallback(async (silent?: boolean) => {
@@ -124,6 +129,11 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
     const timer = setTimeout(() => void load(), 0);
     return () => clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   useLiveRefresh(
     [
@@ -226,8 +236,18 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
     );
   }
 
+  // Server action, not a browser insert: a scheduled order can only get a
+  // rider from 45 minutes before its time (see rider-request.ts).
   function requestRider(orderId: string) {
-    act(`${orderId}:rider`, () => supabase.from("delivery_requests").insert({ order_id: orderId, kitchen_id: kitchenId }));
+    run(`${orderId}:rider`, async () => {
+      setError(null);
+      const result = await requestRiderAction(orderId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      await load(true);
+    });
   }
 
   function refresh() {
@@ -493,14 +513,17 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                     );
                   }
 
+                  const tooEarly = !canRequestRiderAt(o.scheduled_for, now);
                   return (
                     <button
                       onClick={() => requestRider(o.id)}
-                      disabled={busy}
+                      disabled={busy || tooEarly}
                       className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
                       style={{ background: "var(--kb-purple)" }}
                     >
-                      <PendingLabel pending={isRunning(`${o.id}:rider`)} pendingText="Requesting…">Request a rider</PendingLabel>
+                      <PendingLabel pending={isRunning(`${o.id}:rider`)} pendingText="Requesting…">
+                        {tooEarly ? riderRequestOpensLabel(o.scheduled_for) : "Request a rider"}
+                      </PendingLabel>
                     </button>
                   );
                 })()}
