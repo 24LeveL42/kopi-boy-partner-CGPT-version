@@ -2,6 +2,8 @@ export type ApplicationStatus = "pending" | "approved" | "rejected";
 
 export interface Profile {
   id: string;
+  // 'picker' is a retired role: old accounts may still have it in the
+  // database, but the app never offers or routes to it.
   role: "customer" | "cook" | "rider" | "picker" | "admin";
   full_name: string | null;
   phone: string | null;
@@ -30,15 +32,6 @@ export interface RiderApplication {
   user_id: string;
   vehicle_type: string | null;
   license_plate: string | null;
-  photo_url: string | null;
-  status: ApplicationStatus;
-  created_at: string;
-}
-
-export interface PickerApplication {
-  id: string;
-  user_id: string;
-  note: string | null;
   photo_url: string | null;
   status: ApplicationStatus;
   created_at: string;

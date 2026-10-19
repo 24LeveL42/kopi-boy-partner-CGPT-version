@@ -2,8 +2,7 @@
  * Delivery request types — Feature #008 (rider workflow). A cook requests a
  * rider once an order's preparation_status = 'ready'; any approved rider can
  * accept, then marks it delivered. Delivery fee is agreed directly between
- * cook and rider off-platform — no suggested_fee column, unlike
- * pickup_requests.
+ * cook and rider off-platform — there's no fee column.
  */
 
 import type { OrderDeliveryDetails } from "./order-delivery";

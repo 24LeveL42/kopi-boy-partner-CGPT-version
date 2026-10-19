@@ -17,20 +17,6 @@ export interface OrderMessage {
   created_at: string;
 }
 
-/**
- * Pickup chat message — mirrors `pickup_messages` in
- * `docs/supabase-pickup-messages.sql`. Visible only to the pickup's rider and
- * picker, and only while the pickup request is accepted.
- */
-export interface PickupMessage {
-  id: string;
-  pickup_request_id: string;
-  sender_id: string;
-  body: string;
-  photo_path: string | null;
-  created_at: string;
-}
-
 /** The fields ThreadChat renders — common to both chat tables. */
 export type ChatMessage = Pick<OrderMessage, "id" | "sender_id" | "body" | "photo_path" | "created_at">;
 

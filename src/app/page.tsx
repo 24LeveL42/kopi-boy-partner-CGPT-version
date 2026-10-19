@@ -4,11 +4,10 @@ import { ApplyForm } from "@/components/ApplyForm";
 import { StatusScreen } from "@/components/StatusScreen";
 import { PartnerShell } from "@/components/PartnerShell";
 import { KitchenSetupGate } from "@/components/KitchenSetupGate";
-import { PickerShell } from "@/components/PickerShell";
 import { AdminMessagePanel } from "@/components/AdminMessagePanel";
 import { BLOCKED_SCREEN_COPY } from "@/lib/admin-messages";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
-import type { Profile, CookApplication, RiderApplication, PickerApplication } from "@/lib/types-auth";
+import type { Profile, CookApplication, RiderApplication } from "@/lib/types-auth";
 import type { Kitchen } from "@/lib/types-kitchen";
 
 export default async function Home() {
@@ -21,7 +20,7 @@ export default async function Home() {
     return <LoginForm />;
   }
 
-  const [{ data: profile }, { data: cookApp }, { data: riderApp }, { data: pickerApp }, { data: kitchen }] =
+  const [{ data: profile }, { data: cookApp }, { data: riderApp }, { data: kitchen }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single<Profile>(),
       supabase
@@ -38,22 +37,15 @@ export default async function Home() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle<RiderApplication>(),
-      supabase
-        .from("picker_applications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle<PickerApplication>(),
       supabase.from("kitchens").select("*").eq("id", user.id).maybeSingle<Kitchen>(),
     ]);
 
   // All routing decisions live in resolvePartnerScreen (unit-checkable, no DB).
-  const screen = resolvePartnerScreen({ profile, cookApp, riderApp, pickerApp, kitchen });
+  const screen = resolvePartnerScreen({ profile, cookApp, riderApp, kitchen });
 
   switch (screen.kind) {
     case "blocked":
-      // Replaces the whole cook / rider / picker area. No block reason is
+      // Replaces the whole cook / rider area. No block reason is
       // stored, so none is shown — the partner asks HQ through the box below.
       return (
         <StatusScreen tone="warning" signOut title={BLOCKED_SCREEN_COPY.title} message={BLOCKED_SCREEN_COPY.body}>
@@ -92,13 +84,6 @@ export default async function Home() {
               ? { fullName: profile?.full_name ?? null, phone: profile?.phone ?? null, photoUrl: profile?.photo_url ?? null }
               : undefined
           }
-        />
-      );
-    case "picker-shell":
-      return (
-        <PickerShell
-          userId={user.id}
-          profile={profile ? { fullName: profile.full_name, phone: profile.phone, photoUrl: profile.photo_url } : undefined}
         />
       );
     case "apply":

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/SignOutButton";
 import { PartnerProfileForm } from "@/components/PartnerProfileForm";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
-import type { Profile, CookApplication, RiderApplication, PickerApplication } from "@/lib/types-auth";
+import type { Profile, CookApplication, RiderApplication } from "@/lib/types-auth";
 
 export default async function AccountPage() {
   const supabase = await createClient();
@@ -17,19 +17,17 @@ export default async function AccountPage() {
   const latestApplication = <T,>(table: string) =>
     supabase.from(table).select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle<T>();
 
-  const [{ data: profile }, { data: cookApp }, { data: riderApp }, { data: pickerApp }] = await Promise.all([
+  const [{ data: profile }, { data: cookApp }, { data: riderApp }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).single<Profile>(),
     latestApplication<CookApplication>("cook_applications"),
     latestApplication<RiderApplication>("rider_applications"),
-    latestApplication<PickerApplication>("picker_applications"),
   ]);
 
-  // Same decision the home screen makes, so "approved rider/picker" means the
-  // same thing here as it does for their dashboards. The kitchen only matters
+  // Same decision the home screen makes, so "approved rider" means the
+  // same thing here as it does for their dashboard. The kitchen only matters
   // to the cook branch, which this page doesn't care about.
-  const screen = resolvePartnerScreen({ profile, cookApp, riderApp, pickerApp, kitchen: null });
-  const profileRole =
-    screen.kind === "partner-shell" && screen.view === "rider" ? "rider" : screen.kind === "picker-shell" ? "picker" : null;
+  const screen = resolvePartnerScreen({ profile, cookApp, riderApp, kitchen: null });
+  const isRider = screen.kind === "partner-shell" && screen.view === "rider";
 
   return (
     <div className="kb-page min-h-page px-4 py-8 sm:px-6">
@@ -40,9 +38,8 @@ export default async function AccountPage() {
             Account
           </h1>
         </div>
-        {profileRole && profile && (
+        {isRider && profile && (
           <PartnerProfileForm
-            role={profileRole}
             userId={user.id}
             fullName={profile.full_name}
             phone={profile.phone}
@@ -52,7 +49,8 @@ export default async function AccountPage() {
         <div className="kb-card p-5">
           <p className="kb-eyebrow">Signed in as</p>
           <p className="mt-1.5 break-all text-[15px] font-bold">{user.email ?? user.phone}</p>
-          {profile && (
+          {/* The retired picker role isn't shown. */}
+          {profile && profile.role !== "picker" && (
             <span
               className="mt-3 inline-flex rounded-full px-3 py-1 text-xs font-bold capitalize"
               style={{ background: "var(--kb-mint)", color: "var(--kb-green-deep)" }}

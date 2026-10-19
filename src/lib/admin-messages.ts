@@ -17,7 +17,7 @@ export interface AdminMessage {
   created_at: string;
 }
 
-/** Shown on the full-screen page a blocked cook / rider / picker lands on. */
+/** Shown on the full-screen page a blocked cook or rider lands on. */
 export const BLOCKED_SCREEN_COPY = {
   title: "Your account is blocked",
   body: "Please contact the admin below. You can't accept deliveries until your account is unblocked.",

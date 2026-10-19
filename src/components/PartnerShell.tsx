@@ -70,11 +70,8 @@ export function PartnerShell({
           </>
         ) : (
           <section className="partner-surface rounded-[28px] p-4 sm:p-6">
-            <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div className="mb-4">
               <div><p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: "var(--kb-purple)" }}>On the road</p><h2 className="mt-1 font-display text-xl font-bold" style={{ color: "var(--kb-ink)" }}>Delivery dashboard</h2></div>
-              <Link href="/request-picker" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold transition hover:-translate-y-0.5" style={{ color: "var(--kb-purple)", background: "#F1EDFA" }}>
-                Request a picker <span aria-hidden="true">›</span>
-              </Link>
             </div>
             <RiderDeliveriesPanel riderId={userId} />
           </section>

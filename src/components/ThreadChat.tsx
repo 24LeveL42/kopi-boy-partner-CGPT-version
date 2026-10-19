@@ -16,12 +16,12 @@ import {
 
 const MESSAGE_LIMIT = 200;
 
-/** Where a chat's rows and photos live — see OrderChat / PickupChat. */
+/** Where a chat's rows and photos live — see OrderChat / PartnerRiderChat. */
 export interface ThreadChatConfig {
   /** Immutable chat table (select + insert only). */
-  table: "messages" | "pickup_messages" | "partner_rider_messages";
+  table: "messages" | "partner_rider_messages";
   /** Column on `table` that ties a row to its thread. */
-  threadColumn: "order_id" | "pickup_request_id" | "delivery_request_id";
+  threadColumn: "order_id" | "delivery_request_id";
   /** Private bucket; object keys are `<threadId>/<uploader>/<random>.<ext>`. */
   bucket: string;
   title: string;
@@ -34,8 +34,8 @@ export interface ThreadChatConfig {
 }
 
 /**
- * Simple two-person chat box for one thread (an order's delivery, or a
- * pickup request). Mounted only while its thread is accepted (the caller
+ * Simple two-person chat box for one thread (an order's delivery, or the
+ * cook-rider coordination on it). Mounted only while its thread is accepted (the caller
  * controls that); RLS backs the same rule server-side, so if the thread goes
  * terminal mid-conversation the next load/realtime event just returns
  * nothing instead of erroring.

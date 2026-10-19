@@ -3,10 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Must stay in sync with the order-chat-photos bucket and the messages checks
 // in docs/supabase-messages.sql (sections 4-5), which enforce the same rules
 // server-side. Same layout as the Customer app's complaint-photos helpers.
-// pickup-chat-photos (docs/supabase-pickup-messages.sql section 4) uses the
-// exact same limits and key layout, so both chats share these helpers.
 export const ORDER_CHAT_PHOTO_BUCKET = "order-chat-photos";
-export const PICKUP_CHAT_PHOTO_BUCKET = "pickup-chat-photos";
 export const PARTNER_RIDER_CHAT_PHOTO_BUCKET = "partner-rider-chat-photos";
 export const ORDER_CHAT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 export const ORDER_CHAT_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];

@@ -14,7 +14,7 @@ export function SkeletonBlock({ className = "", tone = "navy" }: { className?: s
   );
 }
 
-/** White order/request cards, as in the cook, rider and picker lists. */
+/** White order/request cards, as in the cook and rider lists. */
 export function SkeletonCards({ count = 2, withButton = true }: { count?: number; withButton?: boolean }) {
   return (
     <div className="space-y-2" role="status" aria-label="Loading">

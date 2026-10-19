@@ -33,7 +33,7 @@ export function ApplyForm({ userId }: { userId: string }) {
   const [paynowUen, setPaynowUen] = useState("");
   const [businessUen, setBusinessUen] = useState("");
 
-  // Rider + picker photo
+  // Rider photo
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
 
@@ -41,10 +41,7 @@ export function ApplyForm({ userId }: { userId: string }) {
   const [vehicleType, setVehicleType] = useState("Motorcycle");
   const [licensePlate, setLicensePlate] = useState("");
 
-  // Picker fields
-  const [pickerNote, setPickerNote] = useState("");
-
-  // Global Back steps from a role's form to the role picker.
+  // Global Back steps from a role's form to the role choice.
   useBackHandler(roleChoice ? () => setRoleChoice(null) : null);
 
   function handleSubmit(e: React.FormEvent) {
@@ -78,9 +75,9 @@ export function ApplyForm({ userId }: { userId: string }) {
         .update({
           full_name: fullName.trim(),
           phone: contactNumber.trim(),
-          // A rider's or picker's photo also seeds their live profile photo, so
-          // it carries over on approval; they can change it later from /account.
-          ...((roleChoice === "rider" || roleChoice === "picker") && photoUrl ? { photo_url: photoUrl } : {}),
+          // A rider's photo also seeds their live profile photo, so it carries
+          // over on approval; they can change it later from /account.
+          ...(roleChoice === "rider" && photoUrl ? { photo_url: photoUrl } : {}),
         })
         .eq("id", userId);
 
@@ -111,16 +108,6 @@ export function ApplyForm({ userId }: { userId: string }) {
           user_id: userId,
           vehicle_type: vehicleType,
           license_plate: licensePlate,
-          photo_url: photoUrl,
-        });
-        if (error) {
-          setError(error.message);
-          return;
-        }
-      } else if (roleChoice === "picker") {
-        const { error } = await supabase.from("picker_applications").insert({
-          user_id: userId,
-          note: pickerNote || null,
           photo_url: photoUrl,
         });
         if (error) {
@@ -194,7 +181,7 @@ export function ApplyForm({ userId }: { userId: string }) {
         <div className="mb-6 text-center">
           <span className="kb-pill mb-2">Partner application</span>
           <h1 className="font-display text-2xl font-bold tracking-tight" style={{ color: "var(--kb-ink)" }}>
-            {roleChoice === "cook" ? "Cook application" : roleChoice === "rider" ? "Rider application" : "Picker application"}
+            {roleChoice === "cook" ? "Cook application" : "Rider application"}
           </h1>
           <p className="mt-1.5 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
             Tell us a little about yourself — HQ reviews every application.
@@ -221,29 +208,6 @@ export function ApplyForm({ userId }: { userId: string }) {
               placeholder="e.g. 91234567"
             />
           </Field>
-          {roleChoice === "picker" && (
-            <Field label="Anything we should know? (optional)">
-              <textarea
-                value={pickerNote}
-                onChange={(e) => setPickerNote(e.target.value)}
-                className="kb-input"
-                rows={3}
-                placeholder="e.g. usually free after school, near Toa Payoh"
-              />
-            </Field>
-          )}
-          {roleChoice === "picker" && (
-            <Field label="Your photo (optional — helps HQ verify you)">
-              <PhotoPicker
-                userId={userId}
-                name={fullName}
-                value={photoUrl}
-                onChange={setPhotoUrl}
-                onUploadingChange={setPhotoUploading}
-                tone="light"
-              />
-            </Field>
-          )}
           {roleChoice === "cook" ? (
             <>
               <Field label="Business name">
@@ -346,7 +310,6 @@ export function ApplyForm({ userId }: { userId: string }) {
 const ROLE_OPTIONS: { role: PartnerRole; title: string; description: string }[] = [
   { role: "cook", title: "I'm a cook", description: "Home cook, hawker, bakery, vegetarian, or drinks & desserts" },
   { role: "rider", title: "I'm a rider", description: "Free registration, no fees — you keep the full delivery fee" },
-  { role: "picker", title: "I'm a picker", description: "Casual — collect an order from a cook and hand it to a rider nearby" },
 ];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

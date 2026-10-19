@@ -4,4 +4,4 @@
  * types land with Feature #008.
  */
 
-export type PartnerRole = "cook" | "rider" | "picker";
+export type PartnerRole = "cook" | "rider";

@@ -29,8 +29,8 @@ export function isValidPostalCode(raw: string): boolean {
 
 /**
  * A kitchen's exact location — a kitchen_addresses row. Only the owning cook
- * can read it directly; the rider/picker currently assigned to a request there
- * gets it from get_delivery_kitchen_location / get_pickup_kitchen_location
+ * can read it directly; the rider currently assigned to a delivery there
+ * gets it from get_delivery_kitchen_location
  * (schema sections 28 and 30). Everyone else only sees the coarse public
  * values on kitchens: postal_sector and rounded latitude/longitude (section 29).
  */

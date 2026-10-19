@@ -28,7 +28,7 @@ self.addEventListener("push", (event) => {
   }
 
   const title = data.title || "Kopi Boy Partner";
-  const urgent = data.category === "orders" || data.category === "deliveries" || data.category === "pickups";
+  const urgent = data.category === "orders" || data.category === "deliveries";
   const at = new Date().toISOString();
 
   // Always show something, whether or not any page is open: browsers (iOS

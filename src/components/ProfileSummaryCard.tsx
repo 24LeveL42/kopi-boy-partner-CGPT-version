@@ -7,7 +7,7 @@ export interface ProfileSummary {
   photoUrl: string | null;
 }
 
-/** Photo + name + contact number at the top of a rider/picker home screen; the editor lives at /account. */
+/** Photo + name + contact number at the top of a rider home screen; the editor lives at /account. */
 export function ProfileSummaryCard({ profile }: { profile: ProfileSummary }) {
   return (
     <Link

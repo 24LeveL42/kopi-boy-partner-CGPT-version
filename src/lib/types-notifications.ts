@@ -3,7 +3,13 @@
  * tables in `docs/supabase-notifications.sql`.
  */
 
+/**
+ * "pickups" belonged to the retired picker role. Old rows may still exist in
+ * the database, so it stays in the type, but the app never shows or pushes them.
+ */
 export type NotificationCategory = "orders" | "deliveries" | "pickups" | "account";
+
+export const RETIRED_NOTIFICATION_CATEGORY = "pickups";
 
 export interface AppNotification {
   id: string;
@@ -21,35 +27,29 @@ export interface AppNotification {
 export interface NotificationPrefs {
   orders: boolean;
   deliveries: boolean;
-  pickups: boolean;
   sound: boolean;
-  /** Riders / pickers: off = don't broadcast new requests to me. */
+  /** Riders: off = don't broadcast new requests to me. */
   on_duty: boolean;
 }
 
 export const DEFAULT_PREFS: NotificationPrefs = {
   orders: true,
   deliveries: true,
-  pickups: true,
   sound: true,
   on_duty: true,
 };
 
 /** Which mutable categories matter to each role (account alerts can't be muted). */
-export const CATEGORIES_BY_ROLE: Record<string, { key: "orders" | "deliveries" | "pickups"; label: string; hint: string }[]> = {
+export const CATEGORIES_BY_ROLE: Record<string, { key: "orders" | "deliveries"; label: string; hint: string }[]> = {
   cook: [
     { key: "orders", label: "New orders", hint: "New, cancelled and waiting orders" },
     { key: "deliveries", label: "Delivery updates", hint: "Rider accepted, dropped or delivered" },
   ],
-  rider: [
-    { key: "deliveries", label: "Delivery requests", hint: "New requests from kitchens" },
-    { key: "pickups", label: "Picker updates", hint: "Picker accepted or handed off" },
-  ],
-  picker: [{ key: "pickups", label: "Pickup requests", hint: "New requests from riders" }],
+  rider: [{ key: "deliveries", label: "Delivery requests", hint: "New requests from kitchens" }],
 };
 
 /** Roles that get the "available for requests" (on duty) switch. */
-export const BROADCAST_ROLES = ["rider", "picker"];
+export const BROADCAST_ROLES = ["rider"];
 
 export type PushState =
   | "loading"

@@ -1,4 +1,4 @@
-import type { Profile, CookApplication, RiderApplication, PickerApplication } from "./types-auth";
+import type { Profile, CookApplication, RiderApplication } from "./types-auth";
 import type { Kitchen, MerchantCategory } from "./types-kitchen";
 import { categoryForBusinessType } from "./kitchen-profile.ts";
 
@@ -11,7 +11,6 @@ export interface PartnerRoutingInput {
   profile: Profile | null;
   cookApp: CookApplication | null;
   riderApp: RiderApplication | null;
-  pickerApp: PickerApplication | null;
   kitchen: Kitchen | null;
 }
 
@@ -32,8 +31,7 @@ export type PartnerScreen =
   | { kind: "application-pending" }
   | { kind: "application-rejected" }
   | { kind: "kitchen-setup"; defaults: KitchenDefaults }
-  | { kind: "partner-shell"; view: "cook" | "rider" }
-  | { kind: "picker-shell" };
+  | { kind: "partner-shell"; view: "cook" | "rider" };
 
 function kitchenSetupFor(app: CookApplication): PartnerScreen {
   return {
@@ -61,15 +59,18 @@ export function resolvePartnerScreen({
   profile,
   cookApp,
   riderApp,
-  pickerApp,
   kitchen,
 }: PartnerRoutingInput): PartnerScreen {
-  // Approved and active partner — show the real cook/rider/picker shell.
-  if (profile && (profile.role === "cook" || profile.role === "rider" || profile.role === "picker")) {
+  // The retired picker role has no screen of its own. A blocked one stays
+  // blocked; an active one is treated as not a partner yet, so they can
+  // apply as a cook or rider like anyone else.
+  if (profile?.role === "picker" && !profile.is_active) return { kind: "blocked" };
+
+  // Approved and active partner — show the real cook/rider shell.
+  if (profile && (profile.role === "cook" || profile.role === "rider")) {
     if (!profile.is_active) return { kind: "blocked" };
 
     if (profile.role === "rider") return { kind: "partner-shell", view: "rider" };
-    if (profile.role === "picker") return { kind: "picker-shell" };
 
     // Cook: a saved kitchen means setup is done; otherwise setup needs the
     // cook application it was seeded from.
@@ -83,7 +84,6 @@ export function resolvePartnerScreen({
   const applications = [
     cookApp && { kind: "cook" as const, status: cookApp.status, created_at: cookApp.created_at },
     riderApp && { kind: "rider" as const, status: riderApp.status, created_at: riderApp.created_at },
-    pickerApp && { kind: "picker" as const, status: pickerApp.status, created_at: pickerApp.created_at },
   ]
     .filter((a) => !!a)
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -107,7 +107,6 @@ export function resolvePartnerScreen({
       return kitchen ? { kind: "partner-shell", view: "cook" } : kitchenSetupFor(cookApp);
     }
     if (latest.kind === "rider") return { kind: "partner-shell", view: "rider" };
-    if (latest.kind === "picker") return { kind: "picker-shell" };
   }
 
   return { kind: "apply" };

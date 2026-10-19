@@ -7,6 +7,7 @@ import { playChime, unlockAudio } from "@/lib/notification-sound";
 import { detectPushState, disablePush, enablePush, registerServiceWorker, syncPushSubscription } from "@/lib/push-client";
 import {
   DEFAULT_PREFS,
+  RETIRED_NOTIFICATION_CATEGORY,
   type AppNotification,
   type NotificationPrefs,
   type PushState,
@@ -105,6 +106,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     const { data } = await supabase
       .from("notifications")
       .select("*")
+      .neq("category", RETIRED_NOTIFICATION_CATEGORY)
       .order("created_at", { ascending: false })
       .limit(INBOX_LIMIT)
       .returns<AppNotification[]>();
@@ -117,7 +119,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     supabase
       .from("notification_preferences")
-      .select("orders, deliveries, pickups, sound, on_duty")
+      .select("orders, deliveries, sound, on_duty")
       .eq("user_id", userId)
       .maybeSingle<NotificationPrefs>()
       .then(({ data }) => {
@@ -135,6 +137,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
           const n = payload.new as AppNotification;
+          if (n.category === RETIRED_NOTIFICATION_CATEGORY) return;
           setItems((prev) => (prev.some((p) => p.id === n.id) ? prev : [n, ...prev].slice(0, INBOX_LIMIT)));
           showToast(n);
           if (prefsRef.current.sound) playChime();
@@ -255,7 +258,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         // Roll back to what the database actually has.
         const { data } = await supabase
           .from("notification_preferences")
-          .select("orders, deliveries, pickups, sound, on_duty")
+          .select("orders, deliveries, sound, on_duty")
           .eq("user_id", userId)
           .maybeSingle<NotificationPrefs>();
         setPrefs({ ...DEFAULT_PREFS, ...(data ?? {}) });

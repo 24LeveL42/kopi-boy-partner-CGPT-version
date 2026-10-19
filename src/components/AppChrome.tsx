@@ -31,7 +31,7 @@ function useBarHandler(kind: "back" | "cancel", handler: BackHandler | null) {
 
 /**
  * Lets a screen with its own internal steps (e.g. the login flow, or the
- * apply form's role picker) take over the global Back button while it's
+ * apply form's role choice) take over the global Back button while it's
  * mounted, so Back steps within the screen instead of leaving it. Pass
  * `null` when there's no internal step to go back to.
  */
@@ -69,7 +69,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const [override, setOverride] = useState<BackHandler | null>(null);
   const [cancelOverride, setCancelOverride] = useState<BackHandler | null>(null);
   // Bumped when Home is pressed while already on "/", to remount the page and
-  // reset any in-page steps (login step, apply role picker) to the start.
+  // reset any in-page steps (login step, apply role choice) to the start.
   const [homeKey, setHomeKey] = useState(0);
   // True once this tab has navigated inside the app, so router.back() is
   // known to stay in-app (history.length also counts pages before the app,
@@ -104,7 +104,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   }
 
   // Remounting the page subtree resets any in-page state (login step, apply
-  // role picker, half-filled forms) to its initial value.
+  // role choice, half-filled forms) to its initial value.
   function resetScreen() {
     setHomeKey((k) => k + 1);
   }

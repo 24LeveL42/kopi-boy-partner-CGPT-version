@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import webpush from "web-push";
+import { RETIRED_NOTIFICATION_CATEGORY } from "@/lib/types-notifications";
 
 /**
  * Web Push sender. Supabase calls this from a Database Webhook on every
@@ -84,6 +85,13 @@ export async function POST(request: Request) {
   const record = payload.record;
   if (payload.type !== "INSERT" || payload.table !== "notifications" || !record?.user_id) {
     return NextResponse.json({ error: "Not a notifications INSERT" }, { status: 400 });
+  }
+
+  // Alerts for the retired picker role (old database triggers can still
+  // write them) are never pushed. Nothing is sent, so the browser has
+  // nothing it must display.
+  if (record.category === RETIRED_NOTIFICATION_CATEGORY) {
+    return NextResponse.json({ skipped: "retired category" });
   }
 
   webpush.setVapidDetails(VAPID_SUBJECT || "mailto:admin@example.com", NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);

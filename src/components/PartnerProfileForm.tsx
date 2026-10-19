@@ -8,18 +8,16 @@ import { PendingLabel } from "./Pending";
 import { PhotoPicker } from "./PhotoPicker";
 
 /**
- * Live, self-editable rider/picker profile — the photo and contact number an
- * approved rider or picker can change any time, separate from the one-time
+ * Live, self-editable rider profile — the photo and contact number an
+ * approved rider can change any time, separate from the one-time
  * application. Both live on their own `profiles` row (photo_url, phone).
  */
 export function PartnerProfileForm({
-  role,
   userId,
   fullName,
   phone,
   photoUrl,
 }: {
-  role: "rider" | "picker";
   userId: string;
   fullName: string | null;
   phone: string | null;
@@ -83,8 +81,8 @@ export function PartnerProfileForm({
       className="kb-card space-y-4 p-5"
     >
       <div>
-        <p className="kb-eyebrow">{role === "rider" ? "Delivery partner" : "Picker"}</p>
-        <h2 className="mt-1 font-display text-xl font-bold">{role === "rider" ? "Rider profile" : "Picker profile"}</h2>
+        <p className="kb-eyebrow">Delivery partner</p>
+        <h2 className="mt-1 font-display text-xl font-bold">Rider profile</h2>
       </div>
 
       <div>
