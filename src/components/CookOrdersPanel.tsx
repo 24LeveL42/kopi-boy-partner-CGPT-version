@@ -13,6 +13,9 @@ import { RiderLocationMap } from "./RiderLocationMap";
 import { OrderDeliveryInfo } from "./OrderDeliveryInfo";
 import { requestRider as requestRiderAction } from "@/lib/cook-order-actions";
 import { canRequestRiderAt, riderRequestOpensLabel } from "@/lib/rider-request";
+import { cookOrderFinishedAt, cookOrderOutcome, formatFinishedAt, isCookOrderFinished, isMissingHiddenColumn, newestFirst } from "@/lib/past-orders";
+import { hideAllCookOrders, hideCookOrder } from "@/lib/past-orders-actions";
+import { PastOrdersSection } from "./PastOrdersSection";
 
 interface OrderWithDelivery extends OrderWithItems {
   delivery_requests: DeliveryRequest[];
@@ -69,6 +72,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
   const [newOrders, setNewOrders] = useState<OrderWithItems[]>([]);
   const [awaitingPayment, setAwaitingPayment] = useState<OrderWithItems[]>([]);
   const [inKitchen, setInKitchen] = useState<OrderWithDelivery[]>([]);
+  const [pastOrders, setPastOrders] = useState<OrderWithDelivery[]>([]);
   const [riderDetails, setRiderDetails] = useState<Record<string, DeliveryRiderDetails>>({});
   const [openChatId, setOpenChatId] = useState<string | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
@@ -85,13 +89,19 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
   const load = useCallback(async (silent?: boolean) => {
     if (silent !== true) setLoading(true);
 
-    const { data, error: loadError } = await supabase
-      .from("orders")
-      .select("*, order_items(*), delivery_requests(*)")
-      .eq("kitchen_id", kitchenId)
-      .in("order_status", ["placed", "accepted"])
-      .order("created_at", { ascending: true })
-      .returns<OrderWithDelivery[]>();
+    // Every order the cook hasn't removed from their list (cook_hidden_at,
+    // docs/supabase-hide-past-orders.sql). Before that SQL runs the column
+    // doesn't exist, so load without the filter rather than break the screen.
+    const query = (hiddenFilter: boolean) => {
+      let q = supabase
+        .from("orders")
+        .select("*, order_items(*), delivery_requests(*)")
+        .eq("kitchen_id", kitchenId);
+      if (hiddenFilter) q = q.is("cook_hidden_at", null);
+      return q.order("created_at", { ascending: true }).returns<OrderWithDelivery[]>();
+    };
+    let { data, error: loadError } = await query(true);
+    if (isMissingHiddenColumn(loadError, "cook_hidden_at")) ({ data, error: loadError } = await query(false));
 
     if (loadError) {
       setError(loadError.message);
@@ -99,7 +109,10 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
       return;
     }
 
-    const rows = data ?? [];
+    // Finished (delivered and paid, cancelled, rejected) goes to "Past orders".
+    const all = data ?? [];
+    const rows = all.filter((o) => !isCookOrderFinished(o));
+    setPastOrders(newestFirst(all.filter((o) => isCookOrderFinished(o)), cookOrderFinishedAt));
     setNewOrders(rows.filter((o) => o.order_status === "placed"));
     setAwaitingPayment(rows.filter((o) => o.order_status === "accepted" && o.payment_status === "unpaid"));
     setInKitchen(rows.filter((o) => o.order_status === "accepted"));
@@ -538,6 +551,16 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
         )}
       </section>
 
+      <PastOrdersSection
+        items={pastOrders}
+        getId={(o) => o.id}
+        renderItem={(o) => <CookPastOrder order={o} />}
+        removeOne={hideCookOrder}
+        removeAll={hideAllCookOrders}
+        onRemoved={() => load(true)}
+        pending={{ busy, isRunning, run }}
+      />
+
       <button
         onClick={refresh}
         disabled={busy}
@@ -553,6 +576,31 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
 function Metric({ label, value, tone }: { label: string; value: number; tone: "purple" | "teal" | "neutral" }) {
   const colors = tone === "purple" ? ["#F1EDFA", "var(--kb-purple)"] : tone === "teal" ? ["#E5F7EF", "var(--kb-green-deep)"] : ["#F5F4F7", "var(--kb-ink)"];
   return <div className="rounded-2xl border border-[#eceaf1] p-3 sm:p-4" style={{ background: colors[0] }}><span className="block text-xl font-bold sm:text-2xl" style={{ color: colors[1] }}>{value}</span><span className="mt-1 block text-[10px] font-semibold leading-tight sm:text-xs" style={{ color: "var(--kb-ink-soft)" }}>{label}</span></div>;
+}
+
+function CookPastOrder({ order }: { order: OrderWithDelivery }) {
+  const outcome = cookOrderOutcome(order);
+  return (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Order #{shortId(order.id)}</p>
+          <p className="text-[11px]" style={{ color: "var(--kb-ink-soft)" }}>{formatFinishedAt(cookOrderFinishedAt(order))}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-semibold">S${orderTotal(order).toFixed(2)}</p>
+          <span
+            className="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+            style={outcome === "Delivered" ? { background: "#E5F7EF", color: "var(--kb-green-deep)" } : { background: "#FEF0F0", color: "#B42318" }}
+          >
+            {outcome}
+          </span>
+        </div>
+      </div>
+      <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(order)}</p>
+      <OrderDeliveryInfo details={order} />
+    </>
+  );
 }
 
 function OrderAmounts({ order }: { order: Order }) {

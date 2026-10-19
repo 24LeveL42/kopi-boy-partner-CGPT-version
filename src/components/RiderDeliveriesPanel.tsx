@@ -15,6 +15,9 @@ import { acceptDelivery, completeDelivery, markCollected } from "@/lib/rider-del
 import { isCollected } from "@/lib/rider-delivery";
 import { loadDeliveryOrderDetails, type OrderDeliveryDetails } from "@/lib/order-delivery";
 import { OrderDeliveryInfo } from "@/components/OrderDeliveryInfo";
+import { PastOrdersSection } from "@/components/PastOrdersSection";
+import { formatFinishedAt, isMissingHiddenColumn, newestFirst, riderJobFinishedAt, riderJobOutcome } from "@/lib/past-orders";
+import { hideAllRiderJobs, hideRiderJob } from "@/lib/past-orders-actions";
 
 interface RawRow {
   id: string;
@@ -57,6 +60,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
   const [openRequests, setOpenRequests] = useState<DeliveryRequestWithKitchen[]>([]);
   const [myDelivery, setMyDelivery] = useState<DeliveryRequestWithKitchen | null>(null);
   const [completedToday, setCompletedToday] = useState(0);
+  const [pastJobs, setPastJobs] = useState<DeliveryRequestWithKitchen[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { busy, isRunning, run } = usePendingAction();
@@ -90,6 +94,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       return;
     }
 
+    // Counts every delivery, including ones removed from the list below.
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const { count } = await supabase
@@ -99,6 +104,24 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       .eq("status", "completed")
       .gte("completed_at", startOfDay.toISOString());
     setCompletedToday(count ?? 0);
+
+    // Finished jobs the rider hasn't removed from their list (rider_hidden_at,
+    // docs/supabase-hide-past-orders.sql). Before that SQL runs the column
+    // doesn't exist, so load without the filter rather than break the screen.
+    const pastQuery = (hiddenFilter: boolean) => {
+      let q = supabase
+        .from("delivery_requests")
+        .select("*, kitchens(business_name, postal_sector)")
+        .eq("rider_id", riderId)
+        .in("status", ["completed", "cancelled"]);
+      if (hiddenFilter) q = q.is("rider_hidden_at", null);
+      return q.returns<RawRow[]>();
+    };
+    let { data: past, error: pastError } = await pastQuery(true);
+    if (isMissingHiddenColumn(pastError, "rider_hidden_at")) ({ data: past, error: pastError } = await pastQuery(false));
+    if (pastError) setError(pastError.message);
+    // Drop-off details end with the job (get_delivery_order_details), so past cards don't get them.
+    setPastJobs(newestFirst((past ?? []).map((r) => toRow(r, null)), riderJobFinishedAt));
 
     if (mine) {
       // The exact address/postal code/coordinates are private; the DB hands
@@ -465,6 +488,37 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
           </button>
         </>
       )}
+
+      <div className="mt-4">
+        <PastOrdersSection
+          items={pastJobs}
+          getId={(j) => j.id}
+          renderItem={(j) => <RiderPastJob job={j} />}
+          removeOne={hideRiderJob}
+          removeAll={hideAllRiderJobs}
+          onRemoved={() => load(true)}
+          pending={{ busy, isRunning, run }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RiderPastJob({ job }: { job: DeliveryRequestWithKitchen }) {
+  const outcome = riderJobOutcome(job);
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold">{job.kitchen_business_name}</p>
+        <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>Order #{shortId(job.order_id)}</p>
+        <p className="text-[11px]" style={{ color: "var(--kb-ink-soft)" }}>{formatFinishedAt(riderJobFinishedAt(job))}</p>
+      </div>
+      <span
+        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+        style={outcome === "Delivered" ? { background: "#E5F7EF", color: "var(--kb-green-deep)" } : { background: "#FEF0F0", color: "#B42318" }}
+      >
+        {outcome}
+      </span>
     </div>
   );
 }
