@@ -33,6 +33,9 @@ export function SignOutButton({ onlyWhenSignedIn = false }: { onlyWhenSignedIn?:
       // While still signed in, so the RPC is authorised: stop this device
       // receiving the outgoing account's push alerts.
       await removeDeviceSubscription(supabase);
+      // Same reason: take a rider off Kopi Boy HQ's live map
+      // (docs/supabase-rider-tracking.sql). Deletes nothing for anyone else.
+      await supabase.rpc("stop_rider_sharing").then(() => {}, () => {});
       await supabase.auth.signOut();
       startTransition(() => {
         router.push("/");

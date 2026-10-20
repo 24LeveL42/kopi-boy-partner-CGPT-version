@@ -18,6 +18,8 @@ import { OrderDeliveryInfo } from "@/components/OrderDeliveryInfo";
 import { PastOrdersSection } from "@/components/PastOrdersSection";
 import { formatFinishedAt, isMissingHiddenColumn, newestFirst, riderJobFinishedAt, riderJobOutcome } from "@/lib/past-orders";
 import { hideAllRiderJobs, hideRiderJob } from "@/lib/past-orders-actions";
+import { RiderTrackingShare } from "@/components/RiderTrackingShare";
+import { keepScreenOn } from "@/lib/wake-lock";
 
 interface RawRow {
   id: string;
@@ -305,6 +307,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
           <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ color: "var(--kb-ink-soft)", background: "#F7F6FA" }}>
             Collect from the cook and coordinate the customer handoff with them. Agree the delivery fee directly with the cook.
           </p>
+          <RiderTrackingShare riderId={riderId} deliveryRequestId={myDelivery.id} />
           <RiderLocationShare key={myDelivery.id} deliveryRequestId={myDelivery.id} riderId={riderId} />
           {myDelivery.picked_up_at && (
             <p className="mt-3 rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: "#E5F7EF", color: "var(--kb-green-deep)" }}>
@@ -453,6 +456,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
         </div>
       ) : (
         <>
+          <RiderTrackingShare riderId={riderId} deliveryRequestId={null} />
           {openRequests.length === 0 ? (
             <p className="rounded-2xl bg-white p-4 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
               No open delivery requests right now — check back later.
@@ -553,7 +557,6 @@ function RiderLocationShare({ deliveryRequestId, riderId }: { deliveryRequestId:
     let latest: GeolocationPosition | null = null;
     let lastSent = 0;
     let inFlight = false;
-    let wakeLock: WakeLockSentinel | null = null;
 
     const fail = (message: string) => {
       if (stopped) return;
@@ -613,28 +616,14 @@ function RiderLocationShare({ deliveryRequestId, riderId }: { deliveryRequestId:
     // and customer don't see the location go stale.
     const heartbeat = setInterval(() => void send(), LOCATION_SEND_MS);
 
-    // Keep the screen on while sharing. The browser drops the lock whenever
-    // the page is hidden, so take it again on return. Unsupported → no-op.
-    const acquireWakeLock = async () => {
-      try {
-        if (stopped || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
-        const lock = await navigator.wakeLock.request("screen");
-        if (stopped) void lock.release();
-        else wakeLock = lock;
-      } catch {
-        // Unsupported or refused (e.g. battery saver) — sharing still works.
-      }
-    };
-    const onVisible = () => void acquireWakeLock();
-    void acquireWakeLock();
-    document.addEventListener("visibilitychange", onVisible);
+    // Keep the screen on while sharing.
+    const releaseScreen = keepScreenOn();
 
     return () => {
       stopped = true;
       navigator.geolocation.clearWatch(watchId);
       clearInterval(heartbeat);
-      document.removeEventListener("visibilitychange", onVisible);
-      void wakeLock?.release().catch(() => {});
+      releaseScreen();
       void removeRow();
     };
   }, [sharing, deliveryRequestId, riderId]);
