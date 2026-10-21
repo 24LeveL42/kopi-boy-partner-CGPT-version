@@ -36,6 +36,10 @@ export function SignOutButton({ onlyWhenSignedIn = false }: { onlyWhenSignedIn?:
       // Same reason: take a rider off Kopi Boy HQ's live map
       // (docs/supabase-rider-tracking.sql). Deletes nothing for anyone else.
       await supabase.rpc("stop_rider_sharing").then(() => {}, () => {});
+      // ...and off the cook's and customer's delivery map (rider_live_locations).
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user.id;
+      if (userId) await supabase.from("rider_live_locations").delete().eq("rider_id", userId).then(() => {}, () => {});
       await supabase.auth.signOut();
       startTransition(() => {
         router.push("/");

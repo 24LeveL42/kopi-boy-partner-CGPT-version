@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   LocationReporter,
   LOCATION_CONSENT_VERSION,
+  MAP_SEND_MS,
   MAX_BACKOFF_MS,
+  MapLocationWriter,
   REPORT_INTERVAL_MS,
   STALE_FIX_MS,
   backoffMs,
@@ -13,6 +15,7 @@ import {
   shouldShare,
   toFix,
   type Fix,
+  type MapRow,
   type ReportOutcome,
   type ShareInputs,
   type SharingStatus,
@@ -49,6 +52,25 @@ describe("shouldShare (start/stop rules)", () => {
   });
 });
 
+describe("one control for HQ and the cook/customer map", () => {
+  it("'Not now' shares with no one, and Turn on asks for consent again", () => {
+    const notNow = { ...BASE, consent: "missing" as const, turnedOffForJob: true };
+    assert.equal(shouldShare(notNow), false);
+    assert.equal(shouldAskConsent(notNow), false);
+    assert.equal(shouldAskConsent({ ...notNow, turnedOffForJob: false }), true);
+  });
+
+  it("a finished or cancelled job (no accepted job) stops it even with consent", () => {
+    assert.equal(shouldShare({ ...BASE, deliveryRequestId: null }), false);
+    assert.equal(shouldAskConsent({ ...BASE, consent: "missing", deliveryRequestId: null }), false);
+  });
+
+  it("denied permission stops it until Try again clears the problem", () => {
+    assert.equal(shouldShare({ ...BASE, locationUnavailable: true }), false);
+    assert.equal(shouldShare({ ...BASE, locationUnavailable: false }), true);
+  });
+});
+
 describe("shouldAskConsent", () => {
   const ask = { deliveryRequestId: JOB, consent: "missing" as const, blocked: false, turnedOffForJob: false };
 
@@ -69,6 +91,8 @@ describe("consentStateFor", () => {
   it("only the current version counts as given", () => {
     assert.equal(consentStateFor({ consent_version: LOCATION_CONSENT_VERSION }), "given");
     assert.equal(consentStateFor({ consent_version: "2020-01-v0" }), "missing");
+    // Agreed to the HQ-only wording: asked again for the cook/customer map too.
+    assert.equal(consentStateFor({ consent_version: "2026-10-v1" }), "missing");
     assert.equal(consentStateFor(null), "missing");
   });
 });
@@ -262,5 +286,100 @@ describe("LocationReporter failures", () => {
     h.reporter.stop();
     await h.reporter.update(h.fix());
     assert.equal(h.sent.length, 0);
+  });
+});
+
+/** A map writer on a fake clock that records upserts and deletes in order. */
+function mapHarness({ errors = [] as (string | null)[] } = {}) {
+  let clock = 1_000_000;
+  const log: string[] = [];
+  const rows: MapRow[] = [];
+  const failures: string[] = [];
+  let release: (() => void) | null = null;
+  const state = { hold: false };
+  const writer = new MapLocationWriter({
+    now: () => clock,
+    upsert: async (row) => {
+      rows.push(row);
+      log.push("upsert");
+      if (state.hold) await new Promise<void>((r) => (release = r));
+      return errors.shift() ?? null;
+    },
+    remove: async () => {
+      log.push("delete");
+    },
+    onError: (m) => failures.push(m),
+  });
+  const fix = (): Fix => ({ lat: 1.35, lng: 103.8, accuracy: 12, heading: null, speed: 3, at: clock });
+  return {
+    writer,
+    log,
+    rows,
+    failures,
+    state,
+    fix,
+    release: () => release?.(),
+    advance: (ms: number) => {
+      clock += ms;
+    },
+  };
+}
+
+describe("MapLocationWriter (cook/customer map, rider_live_locations)", () => {
+  it("writes the same columns as before, at most once per MAP_SEND_MS", async () => {
+    const h = mapHarness();
+    await h.writer.update(h.fix());
+    assert.deepEqual(h.rows[0], { lat: 1.35, lng: 103.8, accuracy_m: 12, heading: null, updated_at: new Date(1_000_000).toISOString() });
+    h.advance(MAP_SEND_MS - 1);
+    await h.writer.update(h.fix());
+    assert.equal(h.rows.length, 1);
+    h.advance(1);
+    await h.writer.tick();
+    assert.equal(h.rows.length, 2);
+  });
+
+  it("heartbeat resends the last fix while the rider stands still", async () => {
+    const h = mapHarness();
+    await h.writer.update(h.fix());
+    h.advance(MAP_SEND_MS);
+    await h.writer.tick();
+    h.advance(MAP_SEND_MS);
+    await h.writer.tick();
+    assert.equal(h.rows.length, 3);
+  });
+
+  it("stop() deletes the row and writes nothing more", async () => {
+    const h = mapHarness();
+    await h.writer.update(h.fix());
+    h.writer.stop();
+    h.writer.stop();
+    h.advance(MAP_SEND_MS);
+    await h.writer.update(h.fix());
+    assert.deepEqual(h.log, ["upsert", "delete"]);
+  });
+
+  it("deletes again when a write lands after stop()", async () => {
+    const h = mapHarness();
+    h.state.hold = true;
+    const pending = h.writer.update(h.fix());
+    h.writer.stop();
+    h.release();
+    await pending;
+    assert.deepEqual(h.log, ["upsert", "delete", "delete"]);
+  });
+
+  it("a failed write stops it, deletes the row and reports the error", async () => {
+    const h = mapHarness({ errors: ["permission denied"] });
+    await h.writer.update(h.fix());
+    assert.deepEqual(h.failures, ["permission denied"]);
+    h.advance(MAP_SEND_MS);
+    await h.writer.tick();
+    assert.deepEqual(h.log, ["upsert", "delete"]);
+  });
+
+  it("stop() before any fix still deletes a leftover row", () => {
+    const h = mapHarness();
+    h.writer.stop();
+    assert.deepEqual(h.log, ["delete"]);
   });
 });

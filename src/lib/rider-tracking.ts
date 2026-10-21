@@ -1,8 +1,10 @@
 /**
- * Rider location tracking for Kopi Boy HQ (docs/supabase-rider-tracking.sql):
- * the start/stop rules and the throttled, backed-off reporter behind
- * RiderTrackingShare. Kept free of React, Next.js and Supabase imports so it
- * can be tested with fakes.
+ * Rider location sharing: the start/stop rules behind RiderTrackingShare, the
+ * throttled, backed-off reporter for Kopi Boy HQ (report_rider_location,
+ * docs/supabase-rider-tracking.sql) and the writer for the cook/customer
+ * delivery map (rider_live_locations). One consent and one GPS watch feed
+ * both. Kept free of React, Next.js and Supabase imports so it can be tested
+ * with fakes.
  *
  * Riders have no online/offline switch (notification_preferences.on_duty only
  * mutes new-request alerts), so "on duty" here means: holding an accepted,
@@ -14,8 +16,10 @@
  * wording in RiderTrackingShare changes — riders who agreed to an older
  * version are asked again.
  */
-export const LOCATION_CONSENT_VERSION = "2026-10-v1";
+export const LOCATION_CONSENT_VERSION = "2026-10-v2";
 
+/** At most one rider_live_locations write (cook/customer map) this often. */
+export const MAP_SEND_MS = 10_000;
 /** At most one report_rider_location call this often. */
 export const REPORT_INTERVAL_MS = 15_000;
 /** Longest wait between retries after network/server failures. */
@@ -66,6 +70,11 @@ export const SHARING_STATUS_TEXT: Record<SharingStatus, string> = {
   "no-gps": "Location sharing: no GPS signal",
   "no-network": "Location sharing: no internet — will retry",
 };
+
+/** Under the status line while sharing. */
+export const SHARED_WITH_NOTE = "Shared with Kopi Boy, the cook and the customer during this delivery";
+/** On a job without sharing ("Not now", "Turn off", permission refused). */
+export const SHARING_OFF_NOTE = "Location sharing is off. The customer and cook will not see your location.";
 
 export interface Fix {
   lat: number;
@@ -203,5 +212,82 @@ export class LocationReporter {
   /** Resolves once no call is in flight. */
   settled(): Promise<void> {
     return this.inFlight ?? Promise.resolve();
+  }
+}
+
+/** One rider_live_locations row, as the cook's and customer's map reads it. */
+export interface MapRow {
+  lat: number;
+  lng: number;
+  accuracy_m: number | null;
+  heading: number | null;
+  updated_at: string;
+}
+
+export interface MapWriterOptions {
+  /** Upsert this delivery's row; resolves with the error message, if any. */
+  upsert(row: MapRow): Promise<string | null>;
+  /** Delete this delivery's row. */
+  remove(): PromiseLike<unknown>;
+  now(): number;
+  /** The write failed: writing has stopped and the row is being removed. */
+  onError(message: string): void;
+}
+
+/**
+ * Keeps this delivery's rider_live_locations row (the cook's and customer's
+ * map) on the latest fix: at most one write per MAP_SEND_MS, one at a time,
+ * and tick() resends the last fix so a rider standing still doesn't go stale.
+ * stop() deletes the row; a write that lands after it deletes again. A failed
+ * write stops it and deletes the row.
+ */
+export class MapLocationWriter {
+  private latest: Fix | null = null;
+  private lastSent = 0;
+  private inFlight = false;
+  private stopped = false;
+  private readonly opts: MapWriterOptions;
+
+  constructor(opts: MapWriterOptions) {
+    this.opts = opts;
+  }
+
+  update(fix: Fix): Promise<void> {
+    this.latest = fix;
+    return this.tick();
+  }
+
+  async tick(): Promise<void> {
+    if (this.stopped || this.inFlight || !this.latest || this.opts.now() - this.lastSent < MAP_SEND_MS) return;
+    this.inFlight = true;
+    this.lastSent = this.opts.now();
+    const fix = this.latest;
+    const error = await this.opts
+      .upsert({
+        lat: fix.lat,
+        lng: fix.lng,
+        accuracy_m: fix.accuracy,
+        heading: fix.heading,
+        updated_at: new Date(this.lastSent).toISOString(),
+      })
+      .catch((e: unknown) => (e instanceof Error ? e.message : "network error"));
+    this.inFlight = false;
+    // Stopped while this write was in flight — it may have landed after
+    // stop()'s delete, so delete again.
+    if (this.stopped) {
+      void this.opts.remove();
+      return;
+    }
+    if (error) {
+      this.stop();
+      this.opts.onError(error);
+    }
+  }
+
+  /** No more writes; deletes the row. */
+  stop() {
+    if (this.stopped) return;
+    this.stopped = true;
+    void this.opts.remove();
   }
 }

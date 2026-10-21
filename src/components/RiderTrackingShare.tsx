@@ -8,6 +8,10 @@ import { keepScreenOn } from "@/lib/wake-lock";
 import {
   LOCATION_CONSENT_VERSION,
   LocationReporter,
+  MAP_SEND_MS,
+  MapLocationWriter,
+  SHARED_WITH_NOTE,
+  SHARING_OFF_NOTE,
   SHARING_STATUS_TEXT,
   classifyReportError,
   consentStateFor,
@@ -18,20 +22,22 @@ import {
   type SharingStatus,
 } from "@/lib/rider-tracking";
 
-// How often the reporter checks whether it's time to send (it sends at most
+// How often the HQ reporter checks whether it's time to send (it sends at most
 // once per REPORT_INTERVAL_MS, and only to the server when that's due).
 const TICK_MS = 5_000;
 
 /**
- * Location sharing with Kopi Boy HQ (docs/supabase-rider-tracking.sql), on
- * while the rider holds an accepted, unfinished delivery and has agreed to the
- * current consent version. Separate from RiderLocationShare (the opt-in switch
- * that shows the rider to this order's cook and customer).
+ * The rider's one location control, on while they hold an accepted,
+ * unfinished delivery and have agreed to the current consent version. One GPS
+ * watch and one wake lock feed both Kopi Boy HQ (report_rider_location,
+ * docs/supabase-rider-tracking.sql) and this delivery's cook/customer map
+ * (the rider_live_locations row RiderLocationMap reads).
  *
- * Stops — and removes the rider's live row with stop_rider_sharing — when the
- * job ends (deliveryRequestId becomes null / this unmounts), the rider turns
- * it off, permission is refused, or the database says the rider is blocked.
- * SignOutButton calls stop_rider_sharing itself, while still signed in.
+ * Stops — removing the HQ live row with stop_rider_sharing and this
+ * delivery's rider_live_locations row — when the job ends or is cancelled
+ * (deliveryRequestId becomes null / this unmounts), the rider turns it off,
+ * permission is refused, or the database says the rider is blocked.
+ * SignOutButton removes both itself, while still signed in.
  */
 export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: string; deliveryRequestId: string | null }) {
   const [consent, setConsent] = useState<ConsentState>("loading");
@@ -39,6 +45,10 @@ export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: st
   // Job id the rider said "Not now" / "Turn off" for; a new job asks again.
   const [offForJob, setOffForJob] = useState<string | null>(null);
   const [locationProblem, setLocationProblem] = useState<string | null>(null);
+  // The cook/customer map write failed; HQ reporting carries on.
+  const [mapProblem, setMapProblem] = useState<string | null>(null);
+  // Bumped by "Try again" to restart the watch (and with it the map writes).
+  const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<SharingStatus>("waiting-permission");
   const turnedOffForJob = deliveryRequestId !== null && offForJob === deliveryRequestId;
 
@@ -101,6 +111,26 @@ export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: st
       },
     });
 
+    const mapWriter = new MapLocationWriter({
+      now: () => Date.now(),
+      upsert: async (row) => {
+        const { error } = await supabase
+          .from("rider_live_locations")
+          .upsert({ delivery_request_id: deliveryRequestId, rider_id: riderId, ...row }, { onConflict: "delivery_request_id" });
+        return error ? error.message : null;
+      },
+      remove: () =>
+        supabase
+          .from("rider_live_locations")
+          .delete()
+          .eq("delivery_request_id", deliveryRequestId)
+          .eq("rider_id", riderId)
+          .then(() => {}, () => {}),
+      onError: (message) => {
+        if (!stopped) setMapProblem(`The cook and customer can't see your location right now: ${message}`);
+      },
+    });
+
     // Until the first fix: "waiting for permission" unless already granted.
     navigator.permissions
       ?.query({ name: "geolocation" })
@@ -110,7 +140,11 @@ export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: st
       .catch(() => {});
 
     const watchId = navigator.geolocation.watchPosition(
-      (position) => void reporter.update(toFix(position.coords, position.timestamp)),
+      (position) => {
+        const fix = toFix(position.coords, position.timestamp);
+        void reporter.update(fix);
+        void mapWriter.update(fix);
+      },
       (err) => {
         if (stopped) return;
         if (err.code === err.PERMISSION_DENIED) {
@@ -123,6 +157,9 @@ export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: st
       { enableHighAccuracy: true, maximumAge: 5_000 }
     );
     const timer = setInterval(() => void reporter.tick(), TICK_MS);
+    // GPS may not report while standing still; resend the last fix so the cook
+    // and customer don't see the location go stale.
+    const mapHeartbeat = setInterval(() => void mapWriter.tick(), MAP_SEND_MS);
     const onOnline = () => void reporter.tick();
     window.addEventListener("online", onOnline);
     const releaseScreen = keepScreenOn();
@@ -130,14 +167,16 @@ export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: st
     return () => {
       stopped = true;
       reporter.stop();
+      mapWriter.stop();
       navigator.geolocation.clearWatch(watchId);
       clearInterval(timer);
+      clearInterval(mapHeartbeat);
       window.removeEventListener("online", onOnline);
       releaseScreen();
       // After any call still in flight, so it can't re-create the row.
       void reporter.settled().then(() => supabase.rpc("stop_rider_sharing").then(() => {}, () => {}));
     };
-  }, [sharing, deliveryRequestId]);
+  }, [sharing, deliveryRequestId, riderId, attempt]);
 
   // No job (none on load, or the last one just finished): make sure nothing is
   // left on the HQ map from an earlier session that ended without cleaning up.
@@ -169,11 +208,15 @@ export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: st
 
   const shown: SharingStatus = sharing ? status : "off";
   const dot = shown === "on" ? "var(--kb-green-deep)" : shown === "off" ? "#9A97A3" : "#C77700";
+  const problem = blocked ? null : (locationProblem ?? (sharing ? mapProblem : null));
 
   function turnOn() {
     setLocationProblem(null);
+    setMapProblem(null);
     setStatus("waiting-permission");
     setOffForJob(null);
+    // Still sharing with HQ (only the map write failed): restart the watch.
+    if (sharing) setAttempt((n) => n + 1);
   }
 
   return (
@@ -186,11 +229,11 @@ export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: st
         {!blocked && consent !== "loading" && consent !== "error" && (
           <button
             type="button"
-            onClick={sharing ? () => setOffForJob(deliveryRequestId) : turnOn}
+            onClick={sharing && !problem ? () => setOffForJob(deliveryRequestId) : turnOn}
             className="shrink-0 text-xs font-semibold"
             style={{ color: "var(--kb-purple)" }}
           >
-            {sharing ? "Turn off" : locationProblem ? "Try again" : "Turn on"}
+            {problem ? "Try again" : sharing ? "Turn off" : "Turn on"}
           </button>
         )}
       </div>
@@ -200,12 +243,12 @@ export function RiderTrackingShare({ riderId, deliveryRequestId }: { riderId: st
           : consent === "error"
             ? "Couldn't check your location settings. Reload the page to try again."
             : sharing
-              ? "Shared with Kopi Boy admin only. Keep this app open on this screen during the job."
-              : "Kopi Boy admin can't see your location for this job."}
+              ? SHARED_WITH_NOTE
+              : SHARING_OFF_NOTE}
       </p>
-      {locationProblem && !blocked && (
+      {problem && (
         <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ background: "#FEF0F0", color: "#B42318" }}>
-          {locationProblem}
+          {problem}
         </p>
       )}
     </div>
@@ -253,16 +296,22 @@ function LocationConsent({ onAgreed, onNotNow }: { onAgreed: () => void; onNotNo
 
   return (
     <div className="mt-3 rounded-2xl p-4" style={{ background: "var(--kb-cream)", color: "var(--kb-ink)" }}>
-      <p className="text-sm font-bold">Share your location with Kopi Boy?</p>
+      <p className="text-sm font-bold">Share your location during deliveries?</p>
       <ul className="mt-2 space-y-1.5 text-xs">
         <li><strong>What:</strong> your location (where your phone is).</li>
-        <li><strong>When:</strong> only while you have a job in this app.</li>
-        <li><strong>Who can see it:</strong> Kopi Boy admin only.</li>
+        <li><strong>When:</strong> only while you have an accepted delivery that isn&apos;t finished yet.</li>
+        <li>
+          <strong>Who can see it:</strong> Kopi Boy admin, and the cook and the customer of your delivery on their
+          delivery map.
+        </li>
         <li>
           <strong>How long we keep it:</strong>{" "}
           {months !== null ? `${months} months.` : loadFailed ? "couldn't load — please try again later." : "…"}
         </li>
-        <li><strong>Switching it off:</strong> tap &quot;Turn off&quot; on your job. It also stops by itself when the job is finished.</li>
+        <li>
+          <strong>Switching it off:</strong> tap &quot;Turn off&quot; on your delivery. It also stops by itself when the
+          delivery is finished or cancelled, or when you sign out.
+        </li>
       </ul>
       {error && (
         <p className="mt-2 rounded-xl px-3 py-2 text-xs" style={{ background: "#FEF0F0", color: "#B42318" }}>
