@@ -34,9 +34,17 @@ export interface Order extends OrderDeliveryDetails {
   order_status: OrderStatus;
   payment_status: PaymentStatus;
   preparation_status: PreparationStatus;
+  // Gross food total, before the kitchen's deal.
   subtotal: number;
+  // Set by place_order when a deal applied (Customer repo
+  // docs/supabase-promotions.sql); food_total = subtotal - discount_total is
+  // what the customer pays for the food. Optional: older reads lack them.
+  discount_total?: number | null;
+  food_total?: number | null;
+  promotion_id?: string | null;
+  promotion_label?: string | null;
   // Rider fee quoted to the customer at checkout. The customer PayNows the
-  // cook subtotal + this fee; the cook hands the fee to the rider at pickup.
+  // food total + this fee; the cook hands the fee to the rider at pickup.
   delivery_fee_estimate: number | null;
   decided_at: string | null;
   paid_at: string | null;

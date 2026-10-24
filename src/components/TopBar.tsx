@@ -3,10 +3,10 @@ import { Logo } from "./Logo";
 import { PartnerMenu } from "./PartnerMenu";
 import { NotificationBell } from "./NotificationBell";
 
-export function TopBar({ badge = "Partner" }: { badge?: string }) {
+export function TopBar({ badge = "Partner", isCook = false }: { badge?: string; isCook?: boolean }) {
   return (
     <div className="flex items-center justify-between px-1 py-2">
-      <PartnerMenu />
+      <PartnerMenu isCook={isCook} />
 
       <Logo size={30} />
 

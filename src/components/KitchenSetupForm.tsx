@@ -7,11 +7,13 @@ import { usePendingAction } from "@/lib/use-pending-action";
 import { PendingLabel, Spinner } from "./Pending";
 import { Logo } from "./Logo";
 import { PartnerMenu } from "./PartnerMenu";
+import { FormField as Field } from "./FormField";
 import { useBackHandler, useCancelHandler } from "./AppChrome";
 import type { Kitchen, MenuItem, MerchantCategory, CuisineType, PaynowType } from "@/lib/types-kitchen";
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
 import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen-location-actions";
+import { dealsAffectedByRemoval, planMenuSave, type AffectedDeal, type MenuItemDraft, type MenuSavePlan } from "@/lib/menu-save";
 
 const PAYNOW_TYPES: { id: PaynowType; label: string }[] = [
   { id: "mobile", label: "PayNow Mobile Number" },
@@ -27,6 +29,7 @@ const CUISINES: { id: CuisineType; label: string }[] = [
 
 interface DraftItem {
   key: string; // local React list key only — never sent to the DB
+  id?: string; // set only for rows loaded from the DB, so a save updates them in place
   name: string;
   price: string; // kept as text while editing, parsed to a number on submit
   photo_url: string;
@@ -35,6 +38,10 @@ interface DraftItem {
 
 function emptyItem(): DraftItem {
   return { key: crypto.randomUUID(), name: "", price: "", photo_url: "", photoUploading: false };
+}
+
+function draftFromSaved(i: MenuItem): DraftItem {
+  return { key: i.id, id: i.id, name: i.name, price: String(i.price), photo_url: i.photo_url ?? "", photoUploading: false };
 }
 
 // Failed postal lookups block saving — a wrong kitchen position gives
@@ -110,7 +117,7 @@ export function KitchenSetupForm({
   const [acknowledged, setAcknowledged] = useState(alreadyAcknowledged);
   const [items, setItems] = useState<DraftItem[]>(
     existingItems && existingItems.length > 0
-      ? existingItems.map((i) => ({ key: i.id, name: i.name, price: String(i.price), photo_url: i.photo_url ?? "", photoUploading: false }))
+      ? existingItems.map(draftFromSaved)
       : [emptyItem()]
   );
   const { busy: loading, isRunning, run, startTransition } = usePendingAction();
@@ -119,6 +126,10 @@ export function KitchenSetupForm({
   // "discard?" confirmation.
   const [touched, setTouched] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // A save that would take items out of running or upcoming deals waits here
+  // for the cook's answer (the removal dialog below).
+  const [removalPrompt, setRemovalPrompt] = useState<{ affected: AffectedDeal[]; plan: MenuSavePlan } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function leave() {
     if (onCancel) onCancel();
@@ -221,9 +232,10 @@ export function KitchenSetupForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
 
-    const validItems = items
-      .map((it) => ({ ...it, name: it.name.trim(), price: parseFloat(it.price) }))
+    const validItems: MenuItemDraft[] = items
+      .map((it) => ({ id: it.id, name: it.name.trim(), price: parseFloat(it.price), photo_url: it.photo_url }))
       .filter((it) => it.name.length > 0 && !Number.isNaN(it.price) && it.price > 0);
 
     if (!businessName.trim() || !businessAddress.trim()) {
@@ -243,89 +255,176 @@ export function KitchenSetupForm({
       return;
     }
 
+    // Blank or invalid rows are dropped (so a saved one is deleted), as before.
+    const plan = planMenuSave(existingItems ?? [], validItems);
+
     run("save", async () => {
       try {
-        // Geocode before writing anything, so a failed lookup never leaves a
-        // half-saved kitchen or a wrong position behind.
-        const postal = postalCode.trim();
-        const location = await lookupKitchenPostalCode(postal);
-        if (!location.ok) {
-          setError(postalLookupError(location));
+        const affected = plan.deleteIds.length > 0 ? await findAffectedDeals(plan.deleteIds) : [];
+        if (affected.length > 0) {
+          setRemovalPrompt({ affected, plan });
           return;
         }
-        setFoundAddress({ postal, address: location.address });
-
-        const { error: kitchenError } = await supabase.from("kitchens").upsert({
-          id: userId,
-          business_name: businessName.trim(),
-          category,
-          cuisine_type: cuisineType,
-          is_halal: isHalal,
-          description: description.trim() || null,
-          hero_image: heroImage.trim() || null,
-          paynow_type: paynowType,
-          paynow_value: paynowValue.trim() || null,
-          // Any non-null value means "ticked" — the DB stamps its own now()
-          // the first time and keeps that original timestamp afterwards.
-          acknowledged_terms_at: new Date().toISOString(),
-          is_live: true,
-        });
-        if (kitchenError) throw kitchenError;
-
-        // Address, full postal code and exact coordinates are private, so they
-        // go in kitchen_addresses, never the publicly readable kitchens row;
-        // the DB derives the public postal sector + rounded coordinates from
-        // them (schema sections 28–29). Saved after the kitchen, since it
-        // references it.
-        const { error: addressError } = await supabase.from("kitchen_addresses").upsert({
-          kitchen_id: userId,
-          business_address: businessAddress.trim(),
-          postal_code: postal,
-          latitude: location.lat,
-          longitude: location.lng,
-        });
-        if (addressError) throw addressError;
-
-        // Replace-all on every save — simplest correct approach at this scope.
-        const { error: deleteError } = await supabase.from("menu_items").delete().eq("kitchen_id", userId);
-        if (deleteError) throw deleteError;
-
-        const { error: itemsError } = await supabase.from("menu_items").insert(
-          validItems.map((it) => ({
-            kitchen_id: userId,
-            name: it.name,
-            price: it.price,
-            photo_url: it.photo_url.trim() || null,
-          }))
-        );
-        if (itemsError) throw itemsError;
-
-        if (isEdit) {
-          // Editing happens on a separate /kitchen route — navigate back to
-          // the dashboard.
-          startTransition(() => {
-            router.push("/");
-            router.refresh();
-          });
-        } else {
-          // First-time setup is rendered directly at "/" (see src/app/page.tsx),
-          // so we're already on the target URL — router.push("/") to the
-          // current URL is a same-route no-op here and won't pick up the
-          // fresh kitchen row. refresh() alone re-renders this route with the
-          // now-existing kitchen, which sends the cook to the dashboard.
-          startTransition(() => router.refresh());
-        }
+        await saveKitchen(plan, []);
       } catch (err) {
         setError(describeSupabaseError(err));
       }
     });
   }
 
+  // The cook's running and upcoming deals that use any item about to be
+  // removed. Never blocks the save: if deals can't be read, the menu saves
+  // just as it did before deals existed.
+  async function findAffectedDeals(deleteIds: string[]): Promise<AffectedDeal[]> {
+    const { data, error: dealsError } = await supabase
+      .from("promotions")
+      .select("id, title, free_item_id, promotion_items(menu_item_id)")
+      .eq("kitchen_id", userId)
+      .eq("is_active", true)
+      .is("disabled_by_admin_at", null)
+      .gt("ends_at", new Date().toISOString());
+    if (dealsError) {
+      console.error("KitchenSetupForm: couldn't check deals before removing items", dealsError);
+      return [];
+    }
+    const deals = (data ?? []) as { id: string; title: string; free_item_id: string | null; promotion_items: { menu_item_id: string }[] | null }[];
+    return dealsAffectedByRemoval(
+      deals.map((d) => ({ id: d.id, title: d.title, free_item_id: d.free_item_id, item_ids: (d.promotion_items ?? []).map((pi) => pi.menu_item_id) })),
+      deleteIds
+    );
+  }
+
+  // The removal dialog's "go ahead" answers.
+  function confirmRemoval(stopDealIds: string[]) {
+    const prompt = removalPrompt;
+    if (!prompt) return;
+    setRemovalPrompt(null);
+    run("save", async () => {
+      try {
+        await saveKitchen(prompt.plan, stopDealIds);
+      } catch (err) {
+        setError(describeSupabaseError(err));
+      }
+    });
+  }
+
+  // "Keep item": puts the items the deals use back into the form as they
+  // were saved, without saving; the cook reviews and saves again.
+  function keepDealItems() {
+    const prompt = removalPrompt;
+    if (!prompt) return;
+    setRemovalPrompt(null);
+    const keep = new Set(prompt.affected.flatMap((a) => [...a.removedItemIds, ...(a.removedFreeItemId ? [a.removedFreeItemId] : [])]));
+    const saved = (existingItems ?? []).filter((i) => keep.has(i.id));
+    setItems((prev) => {
+      const byId = new Map(saved.map((i) => [i.id, i]));
+      const next = prev.map((it) => {
+        const original = it.id ? byId.get(it.id) : undefined;
+        return original ? draftFromSaved(original) : it;
+      });
+      const present = new Set(next.map((it) => it.id));
+      return [...next, ...saved.filter((i) => !present.has(i.id)).map(draftFromSaved)];
+    });
+    setNotice("We kept the items your deals use. Review your menu, then save again.");
+  }
+
+  async function saveKitchen(plan: MenuSavePlan, stopDealIds: string[]) {
+    // Geocode before writing anything, so a failed lookup never leaves a
+    // half-saved kitchen or a wrong position behind.
+    const postal = postalCode.trim();
+    const location = await lookupKitchenPostalCode(postal);
+    if (!location.ok) {
+      setError(postalLookupError(location));
+      return;
+    }
+    setFoundAddress({ postal, address: location.address });
+
+    const { error: kitchenError } = await supabase.from("kitchens").upsert({
+      id: userId,
+      business_name: businessName.trim(),
+      category,
+      cuisine_type: cuisineType,
+      is_halal: isHalal,
+      description: description.trim() || null,
+      hero_image: heroImage.trim() || null,
+      paynow_type: paynowType,
+      paynow_value: paynowValue.trim() || null,
+      // Any non-null value means "ticked" — the DB stamps its own now()
+      // the first time and keeps that original timestamp afterwards.
+      acknowledged_terms_at: new Date().toISOString(),
+      is_live: true,
+    });
+    if (kitchenError) throw kitchenError;
+
+    // Address, full postal code and exact coordinates are private, so they
+    // go in kitchen_addresses, never the publicly readable kitchens row;
+    // the DB derives the public postal sector + rounded coordinates from
+    // them (schema sections 28–29). Saved after the kitchen, since it
+    // references it.
+    const { error: addressError } = await supabase.from("kitchen_addresses").upsert({
+      kitchen_id: userId,
+      business_address: businessAddress.trim(),
+      postal_code: postal,
+      latitude: location.lat,
+      longitude: location.lng,
+    });
+    if (addressError) throw addressError;
+
+    // Deals the cook chose to stop rather than leave without their last
+    // item or free item; stopped before the items go.
+    if (stopDealIds.length > 0) {
+      const { error: stopError } = await supabase
+        .from("promotions")
+        .update({ is_active: false })
+        .in("id", stopDealIds)
+        .eq("kitchen_id", userId);
+      if (stopError) throw stopError;
+    }
+
+    // Menu items keep their ids (order history, carts and deals point at
+    // them): update changed rows, insert new ones, and delete only the rows
+    // the cook removed, last, so a save that fails part-way leaves extra
+    // rows behind, never an empty menu.
+    const updateResults = await Promise.all(
+      plan.updates.map(({ id, ...fields }) => supabase.from("menu_items").update(fields).eq("id", id).eq("kitchen_id", userId))
+    );
+    const updateError = updateResults.find((r) => r.error)?.error;
+    if (updateError) throw updateError;
+
+    if (plan.inserts.length > 0) {
+      const { error: itemsError } = await supabase
+        .from("menu_items")
+        .insert(plan.inserts.map((fields) => ({ kitchen_id: userId, ...fields })));
+      if (itemsError) throw itemsError;
+    }
+
+    if (plan.deleteIds.length > 0) {
+      const { error: deleteError } = await supabase.from("menu_items").delete().in("id", plan.deleteIds).eq("kitchen_id", userId);
+      if (deleteError) throw deleteError;
+    }
+
+    if (isEdit) {
+      // Editing happens on a separate /kitchen route — navigate back to
+      // the dashboard.
+      startTransition(() => {
+        router.push("/");
+        router.refresh();
+      });
+    } else {
+      // First-time setup is rendered directly at "/" (see src/app/page.tsx),
+      // so we're already on the target URL — router.push("/") to the
+      // current URL is a same-route no-op here and won't pick up the
+      // fresh kitchen row. refresh() alone re-renders this route with the
+      // now-existing kitchen, which sends the cook to the dashboard.
+      startTransition(() => router.refresh());
+    }
+  }
+
   return (
     <div className="kb-page min-h-page">
       <div className="relative mx-auto max-w-md px-5 py-6">
         <div className="mb-6 flex items-center justify-between">
-          <PartnerMenu />
+          <PartnerMenu isCook={isEdit} />
           <Logo size={36} />
           <span className="w-10" aria-hidden="true" /> {/* balances the menu button so the logo stays centred */}
         </div>
@@ -553,6 +652,11 @@ export function KitchenSetupForm({
               {error}
             </p>
           )}
+          {notice && !error && (
+            <p className="kb-alert-success rounded-2xl px-4 py-3 text-sm">
+              {notice}
+            </p>
+          )}
 
           <label
             className="kb-card flex items-start gap-3 p-4 text-sm leading-6"
@@ -625,15 +729,82 @@ export function KitchenSetupForm({
           </div>
         </div>
       )}
+
+      {removalPrompt && (
+        <RemovalDialog
+          affected={removalPrompt.affected}
+          itemNames={new Map((existingItems ?? []).map((i) => [i.id, i.name]))}
+          onStopAndRemove={() => confirmRemoval(removalPrompt.affected.filter((a) => a.critical).map((a) => a.id))}
+          onContinue={() => confirmRemoval([])}
+          onKeep={keepDealItems}
+        />
+      )}
     </div>
   );
 }
 
-function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+/**
+ * Shown before a save that removes items running or upcoming deals use.
+ * Taking a deal's last eligible item or its free item would leave a
+ * whole-menu deal or a free-item deal that gives nothing, so then the default
+ * is to stop that deal; any other removal is only a heads-up.
+ */
+function RemovalDialog({
+  affected,
+  itemNames,
+  onStopAndRemove,
+  onContinue,
+  onKeep,
+}: {
+  affected: AffectedDeal[];
+  itemNames: Map<string, string>;
+  onStopAndRemove: () => void;
+  onContinue: () => void;
+  onKeep: () => void;
+}) {
+  const critical = affected.some((a) => a.critical);
+  const names = (ids: string[]) => ids.map((id) => itemNames.get(id) ?? "An item").join(", ");
   return (
-    <label className={`block text-xs font-semibold ${className ?? ""}`} style={{ color: "var(--kb-ink-soft)" }}>
-      {label}
-      <div className="mt-1.5">{children}</div>
-    </label>
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-6" role="alertdialog" aria-modal="true" aria-labelledby="removal-title">
+      <button type="button" aria-label="Keep item" onClick={onKeep} className="absolute inset-0 bg-[#1E143C]/40 backdrop-blur-[2px]" />
+      <div className="kb-card-pop relative max-h-[85vh] w-full max-w-sm overflow-y-auto p-6">
+        <h2 id="removal-title" className="font-display text-xl font-bold">
+          {critical ? "This item is part of a deal" : "Some deals use these items"}
+        </h2>
+        <ul className="mt-3 space-y-2 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
+          {affected.map((a) => (
+            <li key={a.id} className="rounded-xl p-3" style={{ background: "var(--kb-field)" }}>
+              <span className="block font-semibold" style={{ color: "var(--kb-ink)" }}>{a.title}</span>
+              {removalText(a, names)}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 space-y-2">
+          {critical ? (
+            <button type="button" autoFocus onClick={onStopAndRemove} className="kb-btn-primary w-full py-3 text-sm">
+              Stop the deal and remove item
+            </button>
+          ) : (
+            <button type="button" autoFocus onClick={onContinue} className="kb-btn-primary w-full py-3 text-sm">
+              Remove and save
+            </button>
+          )}
+          <button type="button" onClick={onKeep} className="kb-btn-ghost w-full py-3 text-sm">
+            Keep item
+          </button>
+        </div>
+      </div>
+    </div>
   );
+}
+
+function removalText(a: AffectedDeal, names: (ids: string[]) => string): string {
+  if (a.losesFreeItem && a.removedFreeItemId) {
+    return `${names([a.removedFreeItemId])} is this deal's free item. Without it the deal gives nothing, so it will be stopped.`;
+  }
+  const one = a.removedItemIds.length === 1;
+  if (a.losesLastItem) {
+    return `${names(a.removedItemIds)} ${one ? "is the only item" : "are the only items"} in this deal. Without ${one ? "it" : "them"} the deal would apply to your whole menu, so it will be stopped.`;
+  }
+  return `${names(a.removedItemIds)} will be taken out of this deal.`;
 }

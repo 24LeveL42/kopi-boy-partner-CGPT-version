@@ -17,7 +17,7 @@ export default async function NotificationsPage() {
   return (
     <div className="kb-page min-h-page">
       <div className="relative mx-auto max-w-md px-4 pb-10 pt-3 sm:max-w-lg sm:px-6">
-        <TopBar badge="Partner" />
+        <TopBar badge="Partner" isCook={profile?.role === "cook"} />
         <div className="mb-5 mt-5">
           <p className="kb-eyebrow">Kopi Boy · Partner</p>
           <h1 className="mt-1 font-display text-2xl font-bold tracking-tight" style={{ color: "var(--kb-ink)" }}>

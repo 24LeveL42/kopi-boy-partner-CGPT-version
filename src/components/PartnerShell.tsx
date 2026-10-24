@@ -28,7 +28,7 @@ export function PartnerShell({
   return (
     <div className="partner-dashboard min-h-page pb-28">
       <header className="mx-auto max-w-6xl px-4 pt-3 sm:px-6 lg:px-8">
-        <TopBar />
+        <TopBar isCook={isCook} />
       </header>
 
       <main className="mx-auto max-w-6xl space-y-5 px-4 pb-8 pt-4 sm:px-6 lg:px-8">
@@ -47,9 +47,18 @@ export function PartnerShell({
               </p>
             </div>
             {isCook ? (
-              <Link href="/kitchen" className="partner-primary inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-bold">
-                <KitchenIcon /> Manage kitchen &amp; menu
-              </Link>
+              <div className="flex flex-col gap-2 sm:items-end">
+                <Link href="/kitchen" className="partner-primary inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-bold">
+                  <KitchenIcon /> Manage kitchen &amp; menu
+                </Link>
+                <Link
+                  href="/promotions"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border bg-white px-5 text-sm font-bold"
+                  style={{ color: "var(--kb-purple)", borderColor: "var(--kb-line)" }}
+                >
+                  <DealIcon /> Promotions &amp; Deals
+                </Link>
+              </div>
             ) : riderProfile ? (
               <div className="w-full sm:w-auto sm:min-w-64">
                 <ProfileSummaryCard profile={riderProfile} />
@@ -80,6 +89,10 @@ export function PartnerShell({
       <BottomNav />
     </div>
   );
+}
+
+function DealIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z" /><circle cx="8" cy="8" r="1.5" /></svg>;
 }
 
 function KitchenIcon() {

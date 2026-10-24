@@ -16,6 +16,9 @@ import { canRequestRiderAt, riderRequestOpensLabel } from "@/lib/rider-request";
 import { cookOrderFinishedAt, cookOrderOutcome, formatFinishedAt, isCookOrderFinished, isMissingHiddenColumn, newestFirst } from "@/lib/past-orders";
 import { hideAllCookOrders, hideCookOrder } from "@/lib/past-orders-actions";
 import { PastOrdersSection } from "./PastOrdersSection";
+// The customer PayNows the food total (after any deal) + delivery fee, so
+// orderTotal is what the cook should look for in their bank app.
+import { orderDeliveryFee, orderDiscount, orderTotal } from "@/lib/order-amounts";
 
 interface OrderWithDelivery extends OrderWithItems {
   delivery_requests: DeliveryRequest[];
@@ -46,15 +49,6 @@ function proofState(order: Order): ProofState {
   return uploaded > rejected ? "current" : "rejected";
 }
 
-// The Customer app asks for subtotal + delivery fee by PayNow, so the total
-// is what the cook should look for in their bank app.
-function deliveryFee(order: Order) {
-  return Number(order.delivery_fee_estimate ?? 0);
-}
-
-function orderTotal(order: Order) {
-  return Number(order.subtotal) + deliveryFee(order);
-}
 
 function timeAgo(iso: string) {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -604,15 +598,22 @@ function CookPastOrder({ order }: { order: OrderWithDelivery }) {
 }
 
 function OrderAmounts({ order }: { order: Order }) {
+  const discount = orderDiscount(order);
   return (
     <div className="mt-3 rounded-xl p-3 text-xs" style={{ background: "var(--kb-field)" }}>
       <div className="flex justify-between" style={{ color: "var(--kb-ink-soft)" }}>
         <span>Food subtotal</span>
         <span>S${Number(order.subtotal).toFixed(2)}</span>
       </div>
+      {discount > 0 && (
+        <div className="mt-1 flex justify-between gap-3" style={{ color: "var(--kb-green-deep)" }}>
+          <span className="min-w-0 truncate">Deal{order.promotion_label ? ` · ${order.promotion_label}` : ""}</span>
+          <span className="shrink-0">-S${discount.toFixed(2)}</span>
+        </div>
+      )}
       <div className="mt-1 flex justify-between" style={{ color: "var(--kb-ink-soft)" }}>
         <span>Delivery fee</span>
-        <span>S${deliveryFee(order).toFixed(2)}</span>
+        <span>S${orderDeliveryFee(order).toFixed(2)}</span>
       </div>
       <p className="text-[11px]" style={{ color: "var(--kb-ink-soft)" }}>You pay this fee to the rider at pickup.</p>
       <div className="mt-2 flex justify-between border-t pt-2 text-sm font-bold" style={{ borderColor: "#E8DFFF", color: "var(--kb-ink)" }}>

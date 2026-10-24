@@ -7,11 +7,11 @@ import { SignOutButton } from "./SignOutButton";
 import { useNotifications } from "./NotificationsProvider";
 
 /**
- * The hamburger button + slide-in drawer (Home, Notifications, My Profile,
- * Sign out). Shared by every signed-in screen that has a header, so Sign out
- * is always one tap away from the menu.
+ * The hamburger button + slide-in drawer (Home, Notifications, Promotions &
+ * Deals for cooks, My Profile, Sign out). Shared by every signed-in screen
+ * that has a header, so Sign out is always one tap away from the menu.
  */
-export function PartnerMenu() {
+export function PartnerMenu({ isCook = false }: { isCook?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { unreadCount } = useNotifications();
 
@@ -82,6 +82,16 @@ export function PartnerMenu() {
                   </span>
                 )}
               </Link>
+              {isCook && (
+                <Link
+                  href="/promotions"
+                  onClick={() => setMenuOpen(false)}
+                  className="block rounded-xl px-3 py-3 text-sm font-semibold transition-colors hover:bg-[#F1EDFA]"
+                  style={{ color: "var(--kb-ink)" }}
+                >
+                  Promotions &amp; Deals
+                </Link>
+              )}
               <Link
                 href="/account"
                 onClick={() => setMenuOpen(false)}
