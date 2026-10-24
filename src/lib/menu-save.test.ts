@@ -1,6 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { dealsAffectedByRemoval, planMenuSave, type SavedMenuItem } from "./menu-save.ts";
+import {
+  assignInsertedIds,
+  dealsAffectedByRemoval,
+  planMenuSave,
+  withInserted,
+  withoutDeleted,
+  withUpdates,
+  type SavedMenuItem,
+} from "./menu-save.ts";
 
 const SAVED: SavedMenuItem[] = [
   { id: "a", name: "Chicken Rice", price: 5, photo_url: null },
@@ -71,6 +79,56 @@ describe("planMenuSave", () => {
   it("compares prices as numbers (Postgres numeric can arrive as text)", () => {
     const plan = planMenuSave([{ id: "a", name: "Rice", price: "5.00" as unknown as number, photo_url: null }], [{ id: "a", name: "Rice", price: 5, photo_url: "" }]);
     assert.deepEqual(plan.updates, []);
+  });
+});
+
+describe("a second Save after a part-way failure", () => {
+  // The form rows: two saved items, one removed (c), one new (k1).
+  const rows = [
+    { key: "a", id: "a", name: "Chicken Rice", price: 5, photo_url: "" },
+    { key: "b", id: "b", name: "Laksa", price: 8, photo_url: "https://x/laksa.jpg" }, // price changed
+    { key: "k1", name: "Milo", price: 2, photo_url: "" },
+  ];
+
+  it("updates the rows the first Save inserted instead of inserting them again", () => {
+    const first = planMenuSave(SAVED, rows);
+    assert.deepEqual(first.inserts, [{ key: "k1", name: "Milo", price: 2, photo_url: null }]);
+    assert.deepEqual(first.updates.map((u) => u.id), ["b"]);
+    assert.deepEqual(first.deleteIds, ["c"]);
+
+    // Updates and the insert succeed (insert ... select id returns "n1"), then the delete fails.
+    let saved = withUpdates(SAVED, first.updates);
+    const inserted = [{ id: "n1", name: "Milo", price: 2, photo_url: null }];
+    saved = withInserted(saved, inserted);
+    const rowsAfter = assignInsertedIds(rows, first.inserts, inserted);
+    assert.equal(rowsAfter[2].id, "n1");
+    assert.equal(rowsAfter[0].id, "a"); // untouched rows keep their ids
+
+    const second = planMenuSave(saved, rowsAfter);
+    assert.deepEqual(second.inserts, []); // no duplicate Milo
+    assert.deepEqual(second.updates, []); // Laksa's new price is already saved
+    assert.deepEqual(second.deleteIds, ["c"]); // only the step that failed is left
+
+    // Once the delete succeeds too, a third Save has nothing to do.
+    saved = withoutDeleted(saved, second.deleteIds);
+    assert.deepEqual(planMenuSave(saved, rowsAfter), { updates: [], inserts: [], deleteIds: [] });
+  });
+
+  it("matches inserted ids to rows by insert order, and leaves rows alone when nothing came back", () => {
+    const two: { key: string; id?: string; name: string; price: number; photo_url: string }[] = [
+      { key: "k1", name: "Milo", price: 2, photo_url: "" },
+      { key: "k2", name: "Kopi", price: 1.8, photo_url: "" },
+    ];
+    const plan = planMenuSave([], two);
+    assert.deepEqual(assignInsertedIds(two, plan.inserts, [{ id: "n1" }, { id: "n2" }]).map((r) => r.id), ["n1", "n2"]);
+    assert.deepEqual(assignInsertedIds(two, plan.inserts, []).map((r) => r.id), [undefined, undefined]);
+  });
+
+  it("never sends the form's row key as a column", () => {
+    const [insert] = planMenuSave([], [{ key: "k1", name: "Milo", price: 2, photo_url: "" }]).inserts;
+    const { name, price, photo_url } = insert;
+    assert.deepEqual({ name, price, photo_url }, { name: "Milo", price: 2, photo_url: null });
+    assert.equal(insert.key, "k1"); // the form strips it: KitchenSetupForm inserts name, price, photo_url only
   });
 });
 

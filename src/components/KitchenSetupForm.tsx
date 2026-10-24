@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { usePendingAction } from "@/lib/use-pending-action";
@@ -13,7 +13,18 @@ import type { Kitchen, MenuItem, MerchantCategory, CuisineType, PaynowType } fro
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
 import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen-location-actions";
-import { dealsAffectedByRemoval, planMenuSave, type AffectedDeal, type MenuItemDraft, type MenuSavePlan } from "@/lib/menu-save";
+import {
+  assignInsertedIds,
+  dealsAffectedByRemoval,
+  planMenuSave,
+  withInserted,
+  withoutDeleted,
+  withUpdates,
+  type AffectedDeal,
+  type MenuItemDraft,
+  type MenuSavePlan,
+  type SavedMenuItem,
+} from "@/lib/menu-save";
 
 const PAYNOW_TYPES: { id: PaynowType; label: string }[] = [
   { id: "mobile", label: "PayNow Mobile Number" },
@@ -40,7 +51,7 @@ function emptyItem(): DraftItem {
   return { key: crypto.randomUUID(), name: "", price: "", photo_url: "", photoUploading: false };
 }
 
-function draftFromSaved(i: MenuItem): DraftItem {
+function draftFromSaved(i: SavedMenuItem): DraftItem {
   return { key: i.id, id: i.id, name: i.name, price: String(i.price), photo_url: i.photo_url ?? "", photoUploading: false };
 }
 
@@ -130,6 +141,14 @@ export function KitchenSetupForm({
   // for the cook's answer (the removal dialog below).
   const [removalPrompt, setRemovalPrompt] = useState<{ affected: AffectedDeal[]; plan: MenuSavePlan } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The menu as it is in the database right now: the page's load, then kept
+  // up to date after every successful write, so a second Save after a
+  // part-way failure plans from what was really saved.
+  const savedItems = useRef<SavedMenuItem[]>(
+    (existingItems ?? []).map((i) => ({ id: i.id, name: i.name, price: Number(i.price), photo_url: i.photo_url }))
+  );
+  // Set from the moment a save starts until it ends (see handleSubmit).
+  const saveInFlight = useRef(false);
 
   function leave() {
     if (onCancel) onCancel();
@@ -231,11 +250,14 @@ export function KitchenSetupForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // A second click (or Enter) while a save is running is ignored. The
+    // button is disabled too, but only after React re-renders.
+    if (saveInFlight.current) return;
     setError(null);
     setNotice(null);
 
     const validItems: MenuItemDraft[] = items
-      .map((it) => ({ id: it.id, name: it.name.trim(), price: parseFloat(it.price), photo_url: it.photo_url }))
+      .map((it) => ({ key: it.key, id: it.id, name: it.name.trim(), price: parseFloat(it.price), photo_url: it.photo_url }))
       .filter((it) => it.name.length > 0 && !Number.isNaN(it.price) && it.price > 0);
 
     if (!businessName.trim() || !businessAddress.trim()) {
@@ -255,10 +277,13 @@ export function KitchenSetupForm({
       return;
     }
 
-    // Blank or invalid rows are dropped (so a saved one is deleted), as before.
-    const plan = planMenuSave(existingItems ?? [], validItems);
+    // Planned against what's really saved now (savedItems), not the page's
+    // first load. Blank or invalid rows are dropped (so a saved one is
+    // deleted), as before.
+    const plan = planMenuSave(savedItems.current, validItems);
 
     run("save", async () => {
+      saveInFlight.current = true;
       try {
         const affected = plan.deleteIds.length > 0 ? await findAffectedDeals(plan.deleteIds) : [];
         if (affected.length > 0) {
@@ -268,6 +293,8 @@ export function KitchenSetupForm({
         await saveKitchen(plan, []);
       } catch (err) {
         setError(describeSupabaseError(err));
+      } finally {
+        saveInFlight.current = false;
       }
     });
   }
@@ -297,13 +324,16 @@ export function KitchenSetupForm({
   // The removal dialog's "go ahead" answers.
   function confirmRemoval(stopDealIds: string[]) {
     const prompt = removalPrompt;
-    if (!prompt) return;
+    if (!prompt || saveInFlight.current) return;
     setRemovalPrompt(null);
     run("save", async () => {
+      saveInFlight.current = true;
       try {
         await saveKitchen(prompt.plan, stopDealIds);
       } catch (err) {
         setError(describeSupabaseError(err));
+      } finally {
+        saveInFlight.current = false;
       }
     });
   }
@@ -315,7 +345,7 @@ export function KitchenSetupForm({
     if (!prompt) return;
     setRemovalPrompt(null);
     const keep = new Set(prompt.affected.flatMap((a) => [...a.removedItemIds, ...(a.removedFreeItemId ? [a.removedFreeItemId] : [])]));
-    const saved = (existingItems ?? []).filter((i) => keep.has(i.id));
+    const saved = savedItems.current.filter((i) => keep.has(i.id));
     setItems((prev) => {
       const byId = new Map(saved.map((i) => [i.id, i]));
       const next = prev.map((it) => {
@@ -391,16 +421,25 @@ export function KitchenSetupForm({
     const updateError = updateResults.find((r) => r.error)?.error;
     if (updateError) throw updateError;
 
+    savedItems.current = withUpdates(savedItems.current, plan.updates);
+
     if (plan.inserts.length > 0) {
-      const { error: itemsError } = await supabase
+      const { data: inserted, error: itemsError } = await supabase
         .from("menu_items")
-        .insert(plan.inserts.map((fields) => ({ kitchen_id: userId, ...fields })));
+        .insert(plan.inserts.map(({ name, price, photo_url }) => ({ kitchen_id: userId, name, price, photo_url })))
+        .select("id, name, price, photo_url");
       if (itemsError) throw itemsError;
+      // Remember the new rows (and give their form rows the ids), so if a
+      // later step fails, Save again updates them instead of inserting twice.
+      const rows = ((inserted ?? []) as SavedMenuItem[]).map((r) => ({ ...r, price: Number(r.price) }));
+      savedItems.current = withInserted(savedItems.current, rows);
+      if (rows.length === plan.inserts.length) setItems((prev) => assignInsertedIds(prev, plan.inserts, rows));
     }
 
     if (plan.deleteIds.length > 0) {
       const { error: deleteError } = await supabase.from("menu_items").delete().in("id", plan.deleteIds).eq("kitchen_id", userId);
       if (deleteError) throw deleteError;
+      savedItems.current = withoutDeleted(savedItems.current, plan.deleteIds);
     }
 
     if (isEdit) {

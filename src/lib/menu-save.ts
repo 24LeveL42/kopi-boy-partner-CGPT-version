@@ -18,8 +18,13 @@ export interface SavedMenuItem {
   photo_url: string | null;
 }
 
-/** A menu row from the form, already trimmed and parsed. `id` is set only for rows loaded from the database. */
+/**
+ * A menu row from the form, already trimmed and parsed. `id` is set only for
+ * rows already in the database; `key` is the form's own row key, carried on
+ * inserts so the new id can be put back on the right row.
+ */
 export interface MenuItemDraft {
+  key?: string;
   id?: string;
   name: string;
   price: number;
@@ -34,7 +39,8 @@ export interface MenuItemFields {
 
 export interface MenuSavePlan {
   updates: (MenuItemFields & { id: string })[];
-  inserts: MenuItemFields[];
+  /** `key` is for assignInsertedIds only — never sent to the database. */
+  inserts: (MenuItemFields & { key?: string })[];
   deleteIds: string[];
 }
 
@@ -48,7 +54,7 @@ export function planMenuSave(existing: SavedMenuItem[], drafts: MenuItemDraft[])
     const saved = draft.id ? byId.get(draft.id) : undefined;
     if (!saved || kept.has(saved.id)) {
       // New, or an id that isn't (or is no longer) in this kitchen's menu.
-      plan.inserts.push(fields);
+      plan.inserts.push(draft.key ? { key: draft.key, ...fields } : fields);
       continue;
     }
     kept.add(saved.id);
@@ -61,6 +67,49 @@ export function planMenuSave(existing: SavedMenuItem[], drafts: MenuItemDraft[])
     if (!kept.has(item.id)) plan.deleteIds.push(item.id);
   }
   return plan;
+}
+
+// ---------------------------------------------------------------------------
+// Keeping the form in step with what was written, so a second Save (e.g.
+// after a later step failed) updates the rows the first one inserted
+// instead of inserting them again. Applied after each write succeeds.
+// ---------------------------------------------------------------------------
+
+export function withUpdates(saved: SavedMenuItem[], updates: MenuSavePlan["updates"]): SavedMenuItem[] {
+  const byId = new Map(updates.map((u) => [u.id, u]));
+  return saved.map((item) => {
+    const u = byId.get(item.id);
+    return u ? { id: item.id, name: u.name, price: u.price, photo_url: u.photo_url } : item;
+  });
+}
+
+export function withInserted(saved: SavedMenuItem[], inserted: SavedMenuItem[]): SavedMenuItem[] {
+  return [...saved, ...inserted];
+}
+
+export function withoutDeleted(saved: SavedMenuItem[], deleteIds: string[]): SavedMenuItem[] {
+  const gone = new Set(deleteIds);
+  return saved.filter((item) => !gone.has(item.id));
+}
+
+/**
+ * Puts the ids of freshly inserted rows on the form rows they came from.
+ * `inserted` is what insert(...).select() returned, in insert order
+ * (PostgREST returns INSERT ... RETURNING rows in the order sent).
+ */
+export function assignInsertedIds<T extends { key: string; id?: string }>(
+  drafts: T[],
+  inserts: MenuSavePlan["inserts"],
+  inserted: { id: string }[]
+): T[] {
+  const idByKey = new Map<string, string>();
+  inserts.forEach((ins, i) => {
+    if (ins.key && inserted[i]) idByKey.set(ins.key, inserted[i].id);
+  });
+  return drafts.map((d) => {
+    const id = idByKey.get(d.key);
+    return id ? { ...d, id } : d;
+  });
 }
 
 /** A running or upcoming deal, with the menu items it uses. */
