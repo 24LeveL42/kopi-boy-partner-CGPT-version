@@ -7,6 +7,17 @@ import { usePendingAction } from "@/lib/use-pending-action";
 import { PartnerRole } from "@/lib/types";
 import { businessUenProblem, normalizeBusinessUen, requiresBusinessUen } from "@/lib/business-uen";
 import { MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
+import {
+  GPS_CONSENT_COPY,
+  PRIVACY_CHECKBOX,
+  PRIVACY_LINK_LABEL,
+  PRIVACY_POLICY_URL,
+  PRIVACY_REQUIRED_MESSAGE,
+  consentFields,
+  isMissingConsentColumns,
+  privacyCopyFor,
+  withoutConsentFields,
+} from "@/lib/privacy-consent";
 import { useBackHandler } from "./AppChrome";
 import { Logo } from "./Logo";
 import { PendingLabel } from "./Pending";
@@ -41,6 +52,11 @@ export function ApplyForm({ userId }: { userId: string }) {
   const [vehicleType, setVehicleType] = useState("Motorcycle");
   const [licensePlate, setLicensePlate] = useState("");
 
+  // Privacy Policy acknowledgement (required) and the rider's GPS consent
+  // (optional). Both start unticked, and again whenever a role is picked.
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [gpsConsent, setGpsConsent] = useState(false);
+
   // Global Back steps from a role's form to the role choice.
   useBackHandler(roleChoice ? () => setRoleChoice(null) : null);
 
@@ -69,6 +85,22 @@ export function ApplyForm({ userId }: { userId: string }) {
       }
     }
 
+    // The database checks this again and stamps the time itself
+    // (docs/supabase-privacy-consent.sql).
+    const consent = roleChoice ? consentFields(roleChoice, acknowledged, gpsConsent) : null;
+    if (!consent) {
+      setError(PRIVACY_REQUIRED_MESSAGE);
+      return;
+    }
+
+    // Before that SQL has run the consent columns don't exist, so the insert
+    // is sent again without them rather than blocking every applicant.
+    async function insertApplication(table: "cook_applications" | "rider_applications", row: Record<string, unknown>) {
+      const { error } = await supabase.from(table).insert(row);
+      if (!isMissingConsentColumns(error)) return error;
+      return (await supabase.from(table).insert(withoutConsentFields(row))).error;
+    }
+
     run("submit", async () => {
       const { error: profileError } = await supabase
         .from("profiles")
@@ -87,7 +119,7 @@ export function ApplyForm({ userId }: { userId: string }) {
       }
 
       if (roleChoice === "cook") {
-        const { error } = await supabase.from("cook_applications").insert({
+        const error = await insertApplication("cook_applications", {
           user_id: userId,
           business_name: businessName,
           business_type: businessType,
@@ -98,17 +130,19 @@ export function ApplyForm({ userId }: { userId: string }) {
           // Home cooks don't register a business, so they never send one (the
           // insert trigger also clears it for them).
           business_uen: requiresBusinessUen(businessType) ? normalizeBusinessUen(businessUen) : null,
+          ...consent,
         });
         if (error) {
           setError(error.message);
           return;
         }
       } else if (roleChoice === "rider") {
-        const { error } = await supabase.from("rider_applications").insert({
+        const error = await insertApplication("rider_applications", {
           user_id: userId,
           vehicle_type: vehicleType,
           license_plate: licensePlate,
           photo_url: photoUrl,
+          ...consent,
         });
         if (error) {
           setError(error.message);
@@ -144,7 +178,11 @@ export function ApplyForm({ userId }: { userId: string }) {
             {ROLE_OPTIONS.map((option) => (
               <button
                 key={option.role}
-                onClick={() => setRoleChoice(option.role)}
+                onClick={() => {
+                  setAcknowledged(false);
+                  setGpsConsent(false);
+                  setRoleChoice(option.role);
+                }}
                 className="group w-full rounded-2xl border px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
                 style={{ borderColor: "rgba(124,58,237,0.12)", background: "white", color: "var(--kb-ink)" }}
               >
@@ -288,6 +326,11 @@ export function ApplyForm({ userId }: { userId: string }) {
             </>
           ) : null}
 
+          {roleChoice && (
+            <PrivacyAcknowledgement role={roleChoice} checked={acknowledged} onChange={setAcknowledged} />
+          )}
+          {roleChoice === "rider" && <GpsConsent checked={gpsConsent} onChange={setGpsConsent} />}
+
           <button
             type="submit"
             disabled={loading || photoUploading}
@@ -311,6 +354,69 @@ const ROLE_OPTIONS: { role: PartnerRole; title: string; description: string }[] 
   { role: "cook", title: "I'm a cook", description: "Home cook, hawker, bakery, vegetarian, or drinks & desserts" },
   { role: "rider", title: "I'm a rider", description: "Free registration, no fees — you keep the full delivery fee" },
 ];
+
+/** Styled like KitchenSetupForm's partner-terms tick box. Wording: src/lib/privacy-consent.ts. */
+function PrivacyAcknowledgement({ role, checked, onChange }: { role: PartnerRole; checked: boolean; onChange: (v: boolean) => void }) {
+  const copy = privacyCopyFor(role);
+  return (
+    <section className="kb-card space-y-3 p-4 text-sm leading-6" style={{ color: "var(--kb-ink)" }}>
+      <div>
+        <h2 className="font-display text-base font-bold">{copy.heading}</h2>
+        <p className="text-xs font-semibold" style={{ color: "var(--kb-purple)" }}>{copy.subheading}</p>
+      </div>
+      <div className="space-y-2 text-[13px]" style={{ color: "var(--kb-ink-soft)" }}>
+        <p>{copy.intro}</p>
+        <p>{copy.lead}</p>
+        <ul className="list-disc space-y-1 pl-5">
+          {copy.points.map((point) => (
+            <li key={point}>{point}</li>
+          ))}
+        </ul>
+      </div>
+      {/* Hidden until the policy has a real URL. */}
+      {PRIVACY_POLICY_URL && (
+        <a
+          href={PRIVACY_POLICY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block text-sm font-semibold underline"
+          style={{ color: "var(--kb-purple)" }}
+        >
+          {PRIVACY_LINK_LABEL}
+        </a>
+      )}
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          required
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="mt-1 h-4 w-4 shrink-0 accent-[#7B3FE4]"
+        />
+        <span className="font-semibold">{PRIVACY_CHECKBOX}</span>
+      </label>
+    </section>
+  );
+}
+
+/** Only recorded with the application; tracking still asks again on the rider's first job. */
+function GpsConsent({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <section className="kb-card space-y-2 p-4 text-sm leading-6" style={{ color: "var(--kb-ink)" }}>
+      <h2 className="text-xs font-semibold" style={{ color: "var(--kb-purple)" }}>{GPS_CONSENT_COPY.subheading}</h2>
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="mt-1 h-4 w-4 shrink-0 accent-[#7B3FE4]"
+        />
+        <span>{GPS_CONSENT_COPY.checkbox}</span>
+      </label>
+      <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{GPS_CONSENT_COPY.note}</p>
+    </section>
+  );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

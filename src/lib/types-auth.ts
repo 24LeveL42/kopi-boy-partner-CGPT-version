@@ -25,6 +25,11 @@ export interface CookApplication {
   business_uen: string | null;
   status: ApplicationStatus;
   created_at: string;
+  // Privacy Policy acknowledgement (docs/supabase-privacy-consent.sql): the
+  // time is the database's. Optional: older applications and reads before
+  // that SQL has run don't have them.
+  privacy_policy_version?: string | null;
+  privacy_acknowledged_at?: string | null;
 }
 
 export interface RiderApplication {
@@ -35,4 +40,11 @@ export interface RiderApplication {
   photo_url: string | null;
   status: ApplicationStatus;
   created_at: string;
+  // As on CookApplication, plus the optional GPS consent given at sign-up.
+  // Only a record: tracking still needs the per-job consent
+  // (rider_location_consent).
+  privacy_policy_version?: string | null;
+  privacy_acknowledged_at?: string | null;
+  gps_consent?: boolean | null;
+  gps_consent_at?: string | null;
 }
