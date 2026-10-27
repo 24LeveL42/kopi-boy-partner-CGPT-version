@@ -19,6 +19,7 @@ import { PastOrdersSection } from "./PastOrdersSection";
 // The customer PayNows the food total (after any deal) + delivery fee, so
 // orderTotal is what the cook should look for in their bank app.
 import { orderDeliveryFee, orderDiscount, orderTotal } from "@/lib/order-amounts";
+import { isOrderOptionsUnavailable, orderLine } from "@/lib/order-lines";
 
 interface OrderWithDelivery extends OrderWithItems {
   delivery_requests: DeliveryRequest[];
@@ -30,8 +31,25 @@ function shortId(id: string) {
   return id.slice(0, 8).toUpperCase();
 }
 
-function itemsSummary(order: OrderWithItems) {
-  return order.order_items.map((i) => `${i.quantity}x ${i.name}`).join(", ");
+// One row per dish: "Laksa x2  (Hot, Extra egg)" with its line total
+// (dish price + add-ons) × quantity on the right.
+function OrderLines({ order }: { order: OrderWithItems }) {
+  return (
+    <ul className="mt-1 space-y-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+      {order.order_items.map((item, i) => {
+        const line = orderLine(item);
+        return (
+          <li key={item.id ?? i} className="flex justify-between gap-3">
+            <span className="min-w-0">
+              <span style={{ color: "var(--kb-ink)" }}>{line.label}</span>
+              {line.options && <span> ({line.options})</span>}
+            </span>
+            <span className="shrink-0">S${line.total.toFixed(2)}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 const PAYMENT_PROOF_BUCKET = "payment-proofs";
@@ -86,16 +104,25 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
     // Every order the cook hasn't removed from their list (cook_hidden_at,
     // docs/supabase-hide-past-orders.sql). Before that SQL runs the column
     // doesn't exist, so load without the filter rather than break the screen.
-    const query = (hiddenFilter: boolean) => {
+    // Likewise the add-ons picked (order_item_options): if the cook can't
+    // read them, lines show without their add-on names (totals still right).
+    const query = (hiddenFilter: boolean, withOptions: boolean) => {
       let q = supabase
         .from("orders")
-        .select("*, order_items(*), delivery_requests(*)")
+        .select(withOptions ? "*, order_items(*, order_item_options(*)), delivery_requests(*)" : "*, order_items(*), delivery_requests(*)")
         .eq("kitchen_id", kitchenId);
       if (hiddenFilter) q = q.is("cook_hidden_at", null);
       return q.order("created_at", { ascending: true }).returns<OrderWithDelivery[]>();
     };
-    let { data, error: loadError } = await query(true);
-    if (isMissingHiddenColumn(loadError, "cook_hidden_at")) ({ data, error: loadError } = await query(false));
+    let hiddenFilter = true;
+    let withOptions = true;
+    let { data, error: loadError } = await query(hiddenFilter, withOptions);
+    for (let retry = 0; retry < 2 && loadError; retry++) {
+      if (hiddenFilter && isMissingHiddenColumn(loadError, "cook_hidden_at")) hiddenFilter = false;
+      else if (withOptions && isOrderOptionsUnavailable(loadError)) withOptions = false;
+      else break;
+      ({ data, error: loadError } = await query(hiddenFilter, withOptions));
+    }
 
     if (loadError) {
       setError(loadError.message);
@@ -294,7 +321,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                   <p className="text-sm font-semibold">Order #{shortId(o.id)}</p>
                   <p className="text-sm font-semibold">S${orderTotal(o).toFixed(2)}</p>
                 </div>
-                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                <OrderLines order={o} />
                 <OrderDeliveryInfo details={o} />
                 <OrderAmounts order={o} />
                 <div className="mt-3 flex gap-2">
@@ -347,7 +374,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                       <p className="text-base font-bold" style={{ color: "var(--kb-purple)" }}>S${orderTotal(o).toFixed(2)}</p>
                     </div>
                   </div>
-                  <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                  <OrderLines order={o} />
                   <OrderDeliveryInfo details={o} />
                   <OrderAmounts order={o} />
 
@@ -428,7 +455,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
                   <p className="text-sm font-semibold">Order #{shortId(o.id)}</p>
                   <p className="text-sm font-semibold">S${orderTotal(o).toFixed(2)}</p>
                 </div>
-                <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(o)}</p>
+                <OrderLines order={o} />
                 <OrderDeliveryInfo details={o} />
                 <OrderAmounts order={o} />
                 {o.preparation_status === "not_started" && (
@@ -591,7 +618,7 @@ function CookPastOrder({ order }: { order: OrderWithDelivery }) {
           </span>
         </div>
       </div>
-      <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{itemsSummary(order)}</p>
+      <OrderLines order={order} />
       <OrderDeliveryInfo details={order} />
     </>
   );

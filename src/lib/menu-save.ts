@@ -69,6 +69,22 @@ export function planMenuSave(existing: SavedMenuItem[], drafts: MenuItemDraft[])
   return plan;
 }
 
+/**
+ * The first form row (index) the cook must fix before saving, or -1.
+ * planMenuSave deletes a saved dish whose row is dropped for having no name
+ * or price, and its add-ons with it, so a saved dish (or one with add-ons)
+ * must keep a valid name and price; to take it off the menu the cook taps
+ * Remove. `validKeys`: rows that passed the name/price check.
+ */
+export function firstRowNeedingFix(
+  rows: { key: string; id?: string; hasAddons: boolean }[],
+  validKeys: Set<string>,
+  saved: SavedMenuItem[]
+): number {
+  const savedIds = new Set(saved.map((i) => i.id));
+  return rows.findIndex((r) => ((!!r.id && savedIds.has(r.id)) || r.hasAddons) && !validKeys.has(r.key));
+}
+
 // ---------------------------------------------------------------------------
 // Keeping the form in step with what was written, so a second Save (e.g.
 // after a later step failed) updates the rows the first one inserted

@@ -4,6 +4,7 @@ import { KitchenSetupForm } from "@/components/KitchenSetupForm";
 import type { Profile } from "@/lib/types-auth";
 import type { Kitchen, MenuItem } from "@/lib/types-kitchen";
 import type { KitchenLocation } from "@/lib/kitchen-profile";
+import { addonsByItem, type GroupRow, type SavedGroup } from "@/lib/menu-addons";
 
 export default async function KitchenPage() {
   const supabase = await createClient();
@@ -37,6 +38,21 @@ export default async function KitchenPage() {
       .returns<MenuItem[]>(),
   ]);
 
+  // Add-ons for the dishes, by dish id. null = they couldn't be read, and
+  // then the form doesn't offer them at all: saving add-ons replaces a dish's
+  // whole list, so it must never save from a list that didn't load.
+  let addons: Record<string, SavedGroup[]> | null = {};
+  const itemIds = (items ?? []).map((i) => i.id);
+  if (itemIds.length > 0) {
+    const { data: groups, error: addonsError } = await supabase
+      .from("menu_option_groups")
+      .select("id, menu_item_id, name, required, max_picks, sort_order, menu_options(id, name, price, sold_out, sort_order)")
+      .in("menu_item_id", itemIds)
+      .returns<GroupRow[]>();
+    if (addonsError) console.error("Kitchen page: couldn't load add-ons", addonsError);
+    addons = addonsError ? null : addonsByItem(groups ?? []);
+  }
+
   return (
     <KitchenSetupForm
       userId={user.id}
@@ -51,6 +67,7 @@ export default async function KitchenPage() {
       }}
       existingKitchen={kitchen}
       existingItems={items ?? []}
+      existingAddons={addons}
     />
   );
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   assignInsertedIds,
   dealsAffectedByRemoval,
+  firstRowNeedingFix,
   planMenuSave,
   withInserted,
   withoutDeleted,
@@ -167,5 +168,30 @@ describe("dealsAffectedByRemoval", () => {
   it("marks a deal critical once all its items go, even across several", () => {
     const affected = dealsAffectedByRemoval(deals, ["a", "b"]);
     assert.deepEqual(affected.map((a) => [a.id, a.critical]), [["d1", true], ["d2", true]]);
+  });
+});
+
+describe("firstRowNeedingFix", () => {
+  const rows = [
+    { key: "a", id: "a", hasAddons: false },
+    { key: "b", id: "b", hasAddons: false },
+    { key: "n1", hasAddons: false },
+    { key: "n2", hasAddons: true },
+  ];
+
+  it("passes when every saved dish still has a name and price", () => {
+    assert.equal(firstRowNeedingFix(rows, new Set(["a", "b", "n2"]), SAVED), -1); // blank new row n1 is just dropped
+  });
+
+  it("stops a saved dish with a blank price from being deleted", () => {
+    assert.equal(firstRowNeedingFix(rows, new Set(["a", "n2"]), SAVED), 1);
+  });
+
+  it("stops a new dish with add-ons from being dropped", () => {
+    assert.equal(firstRowNeedingFix(rows, new Set(["a", "b"]), SAVED), 3);
+  });
+
+  it("lets a row whose id is no longer saved be dropped like a new one", () => {
+    assert.equal(firstRowNeedingFix([{ key: "z", id: "gone", hasAddons: false }], new Set(), SAVED), -1);
   });
 });

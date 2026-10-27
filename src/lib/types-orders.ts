@@ -22,6 +22,22 @@ export interface OrderItem {
   name: string;
   price: number;
   quantity: number;
+  // Per-unit total of the add-ons picked; the line is (price + options_price)
+  // * quantity. Optional: orders from before add-ons, or a read without it.
+  options_price?: number | null;
+  // Snapshot of the add-ons picked (read-only for cooks); missing when the
+  // panel had to load without it (see isOrderOptionsUnavailable).
+  order_item_options?: OrderItemOption[] | null;
+}
+
+export interface OrderItemOption {
+  id: string;
+  order_item_id: string;
+  option_id: string | null;
+  group_name: string;
+  name: string;
+  price: number;
+  sort_order: number | null;
 }
 
 // The delivery fields (delivery_type, scheduled_for, address snapshot,

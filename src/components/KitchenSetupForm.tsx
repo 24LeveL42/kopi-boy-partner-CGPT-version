@@ -7,6 +7,7 @@ import { usePendingAction } from "@/lib/use-pending-action";
 import { PendingLabel, Spinner } from "./Pending";
 import { Logo } from "./Logo";
 import { PartnerMenu } from "./PartnerMenu";
+import { MenuItemAddons } from "./MenuItemAddons";
 import { FormField as Field } from "./FormField";
 import { useBackHandler, useCancelHandler } from "./AppChrome";
 import type { Kitchen, MenuItem, MerchantCategory, CuisineType, PaynowType } from "@/lib/types-kitchen";
@@ -16,6 +17,7 @@ import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen
 import {
   assignInsertedIds,
   dealsAffectedByRemoval,
+  firstRowNeedingFix,
   planMenuSave,
   withInserted,
   withoutDeleted,
@@ -25,6 +27,19 @@ import {
   type MenuSavePlan,
   type SavedMenuItem,
 } from "@/lib/menu-save";
+import {
+  checkAddons,
+  describeAddonsError,
+  describeSoldOutResult,
+  draftsFromSaved,
+  draftsWithSavedIds,
+  parseSavedGroups,
+  planAddonSaves,
+  withSoldOut,
+  type AddonJob,
+  type GroupDraft,
+  type SavedGroup,
+} from "@/lib/menu-addons";
 
 const PAYNOW_TYPES: { id: PaynowType; label: string }[] = [
   { id: "mobile", label: "PayNow Mobile Number" },
@@ -45,14 +60,23 @@ interface DraftItem {
   price: string; // kept as text while editing, parsed to a number on submit
   photo_url: string;
   photoUploading: boolean; // local UI state only — never sent to the DB
+  addons: GroupDraft[]; // saved separately, after the dish (save_menu_item_options)
 }
 
 function emptyItem(): DraftItem {
-  return { key: crypto.randomUUID(), name: "", price: "", photo_url: "", photoUploading: false };
+  return { key: crypto.randomUUID(), name: "", price: "", photo_url: "", photoUploading: false, addons: [] };
 }
 
-function draftFromSaved(i: SavedMenuItem): DraftItem {
-  return { key: i.id, id: i.id, name: i.name, price: String(i.price), photo_url: i.photo_url ?? "", photoUploading: false };
+function draftFromSaved(i: SavedMenuItem, addons: Record<string, SavedGroup[]>): DraftItem {
+  return {
+    key: i.id,
+    id: i.id,
+    name: i.name,
+    price: String(i.price),
+    photo_url: i.photo_url ?? "",
+    photoUploading: false,
+    addons: draftsFromSaved(addons[i.id] ?? []),
+  };
 }
 
 // Failed postal lookups block saving — a wrong kitchen position gives
@@ -93,12 +117,18 @@ export function KitchenSetupForm({
   defaults,
   existingKitchen,
   existingItems,
+  existingAddons = {},
   onCancel,
 }: {
   userId: string;
   defaults: KitchenDefaults;
   existingKitchen?: Kitchen | null;
   existingItems?: MenuItem[];
+  /**
+   * The dishes' add-ons by dish id. null = they couldn't be loaded, and then
+   * add-ons are neither shown nor saved (saving replaces a dish's whole list).
+   */
+  existingAddons?: Record<string, SavedGroup[]> | null;
   /** Where Cancel goes. Defaults to Home; first-time setup (which *is* Home) passes its own. */
   onCancel?: () => void;
 }) {
@@ -126,9 +156,10 @@ export function KitchenSetupForm({
   // haven't ticked it yet, including ones set up before it existed.
   const alreadyAcknowledged = !!existingKitchen?.acknowledged_terms_at;
   const [acknowledged, setAcknowledged] = useState(alreadyAcknowledged);
+  const addonsAvailable = existingAddons !== null;
   const [items, setItems] = useState<DraftItem[]>(
     existingItems && existingItems.length > 0
-      ? existingItems.map(draftFromSaved)
+      ? existingItems.map((i) => draftFromSaved(i, existingAddons ?? {}))
       : [emptyItem()]
   );
   const { busy: loading, isRunning, run, startTransition } = usePendingAction();
@@ -139,7 +170,7 @@ export function KitchenSetupForm({
   const [confirmLeave, setConfirmLeave] = useState(false);
   // A save that would take items out of running or upcoming deals waits here
   // for the cook's answer (the removal dialog below).
-  const [removalPrompt, setRemovalPrompt] = useState<{ affected: AffectedDeal[]; plan: MenuSavePlan } | null>(null);
+  const [removalPrompt, setRemovalPrompt] = useState<{ affected: AffectedDeal[]; plan: MenuSavePlan; addonJobs: AddonJob[] } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // The menu as it is in the database right now: the page's load, then kept
   // up to date after every successful write, so a second Save after a
@@ -147,6 +178,12 @@ export function KitchenSetupForm({
   const savedItems = useRef<SavedMenuItem[]>(
     (existingItems ?? []).map((i) => ({ id: i.id, name: i.name, price: Number(i.price), photo_url: i.photo_url }))
   );
+  // Each dish's add-ons as they are in the database, by dish id; kept up to
+  // date like savedItems, so only changed add-ons are saved.
+  const savedAddons = useRef<Record<string, SavedGroup[]>>({ ...(existingAddons ?? {}) });
+  // From the last Save: what to fix in the add-ons, by group/option key, and
+  // whole-dish messages by form row key.
+  const [addonErrors, setAddonErrors] = useState<{ fields: Record<string, string>; dishes: Record<string, string> }>({ fields: {}, dishes: {} });
   // Set from the moment a save starts until it ends (see handleSubmit).
   const saveInFlight = useRef(false);
 
@@ -272,8 +309,39 @@ export function KitchenSetupForm({
       setError("Please tick the acknowledgement before saving.");
       return;
     }
+    // A saved dish left without a name or price would be deleted, add-ons
+    // and all; the cook takes dishes off with Remove instead.
+    const validKeys = new Set(validItems.map((v) => v.key!));
+    const brokenIndex = firstRowNeedingFix(
+      items.map((it) => ({ key: it.key, id: it.id, hasAddons: it.addons.length > 0 })),
+      validKeys,
+      savedItems.current
+    );
+    if (brokenIndex >= 0) {
+      const name = items[brokenIndex].name.trim();
+      setError(`Item ${brokenIndex + 1}${name ? ` (${name})` : ""} needs a name and a price above $0. To take it off your menu, tap Remove.`);
+      return;
+    }
     if (validItems.length === 0) {
       setError("Add at least one menu item with a name and a price above $0 — this is required before you can go live.");
+      return;
+    }
+
+    const addonJobs: AddonJob[] = [];
+    const fieldErrors: Record<string, string> = {};
+    const dishErrors: Record<string, string> = {};
+    if (addonsAvailable) {
+      for (const it of items) {
+        if (!validKeys.has(it.key)) continue;
+        const check = checkAddons(it.addons);
+        Object.assign(fieldErrors, check.errors);
+        if (check.formError) dishErrors[it.key] = check.formError;
+        if (check.groups) addonJobs.push({ key: it.key, id: it.id, name: it.name.trim(), groups: check.groups });
+      }
+    }
+    setAddonErrors({ fields: fieldErrors, dishes: dishErrors });
+    if (Object.keys(fieldErrors).length > 0 || Object.keys(dishErrors).length > 0) {
+      setError("Some add-ons need fixing. See the notes in red under your dishes.");
       return;
     }
 
@@ -287,10 +355,10 @@ export function KitchenSetupForm({
       try {
         const affected = plan.deleteIds.length > 0 ? await findAffectedDeals(plan.deleteIds) : [];
         if (affected.length > 0) {
-          setRemovalPrompt({ affected, plan });
+          setRemovalPrompt({ affected, plan, addonJobs });
           return;
         }
-        await saveKitchen(plan, []);
+        await saveKitchen(plan, addonJobs, []);
       } catch (err) {
         setError(describeSupabaseError(err));
       } finally {
@@ -329,7 +397,7 @@ export function KitchenSetupForm({
     run("save", async () => {
       saveInFlight.current = true;
       try {
-        await saveKitchen(prompt.plan, stopDealIds);
+        await saveKitchen(prompt.plan, prompt.addonJobs, stopDealIds);
       } catch (err) {
         setError(describeSupabaseError(err));
       } finally {
@@ -350,15 +418,15 @@ export function KitchenSetupForm({
       const byId = new Map(saved.map((i) => [i.id, i]));
       const next = prev.map((it) => {
         const original = it.id ? byId.get(it.id) : undefined;
-        return original ? draftFromSaved(original) : it;
+        return original ? draftFromSaved(original, savedAddons.current) : it;
       });
       const present = new Set(next.map((it) => it.id));
-      return [...next, ...saved.filter((i) => !present.has(i.id)).map(draftFromSaved)];
+      return [...next, ...saved.filter((i) => !present.has(i.id)).map((i) => draftFromSaved(i, savedAddons.current))];
     });
     setNotice("We kept the items your deals use. Review your menu, then save again.");
   }
 
-  async function saveKitchen(plan: MenuSavePlan, stopDealIds: string[]) {
+  async function saveKitchen(plan: MenuSavePlan, addonJobs: AddonJob[], stopDealIds: string[]) {
     // Geocode before writing anything, so a failed lookup never leaves a
     // half-saved kitchen or a wrong position behind.
     const postal = postalCode.trim();
@@ -423,6 +491,7 @@ export function KitchenSetupForm({
 
     savedItems.current = withUpdates(savedItems.current, plan.updates);
 
+    let insertedRows: SavedMenuItem[] = [];
     if (plan.inserts.length > 0) {
       const { data: inserted, error: itemsError } = await supabase
         .from("menu_items")
@@ -432,6 +501,7 @@ export function KitchenSetupForm({
       // Remember the new rows (and give their form rows the ids), so if a
       // later step fails, Save again updates them instead of inserting twice.
       const rows = ((inserted ?? []) as SavedMenuItem[]).map((r) => ({ ...r, price: Number(r.price) }));
+      insertedRows = rows;
       savedItems.current = withInserted(savedItems.current, rows);
       if (rows.length === plan.inserts.length) setItems((prev) => assignInsertedIds(prev, plan.inserts, rows));
     }
@@ -440,6 +510,14 @@ export function KitchenSetupForm({
       const { error: deleteError } = await supabase.from("menu_items").delete().in("id", plan.deleteIds).eq("kitchen_id", userId);
       if (deleteError) throw deleteError;
       savedItems.current = withoutDeleted(savedItems.current, plan.deleteIds);
+    }
+
+    // Add-ons go last: a new dish needs its id first. If any fail, the cook
+    // stays here with their add-on edits; Save again retries only those.
+    const addonsFailed = await saveAddons(addonJobs, plan, insertedRows);
+    if (addonsFailed) {
+      setError(addonsFailed);
+      return;
     }
 
     if (isEdit) {
@@ -457,6 +535,56 @@ export function KitchenSetupForm({
       // now-existing kitchen, which sends the cook to the dashboard.
       startTransition(() => router.refresh());
     }
+  }
+
+  // Saves each changed dish's add-ons; returns what to tell the cook if any failed.
+  async function saveAddons(jobs: AddonJob[], plan: MenuSavePlan, insertedRows: SavedMenuItem[]): Promise<string | null> {
+    const { saves, unresolved } = planAddonSaves(jobs, plan.inserts, insertedRows, savedAddons.current);
+    const failed = unresolved.map((name) => ({ name, message: "Please save again." }));
+    const results = await Promise.all(
+      saves.map(async (save) => {
+        const { data, error: rpcError } = await supabase.rpc("save_menu_item_options", {
+          p_menu_item_id: save.menuItemId,
+          p_groups: save.groups,
+        });
+        return { save, data, rpcError };
+      })
+    );
+    for (const { save, data, rpcError } of results) {
+      if (rpcError) {
+        console.error("KitchenSetupForm: couldn't save add-ons", rpcError);
+        failed.push({ name: save.name, message: describeAddonsError(rpcError) });
+        continue;
+      }
+      const saved = parseSavedGroups(data);
+      savedAddons.current = { ...savedAddons.current, [save.menuItemId]: saved };
+      setItems((prev) => prev.map((it) => (it.key === save.key ? { ...it, addons: draftsWithSavedIds(it.addons, saved) } : it)));
+    }
+    if (failed.length === 0) return null;
+    const messages = [...new Set(failed.map((f) => f.message))].join(" ");
+    return `Your menu was saved, but the add-ons for ${failed.map((f) => f.name).join(", ")} weren't. ${messages}`;
+  }
+
+  // The Sold out switch on a saved option: saved now, on its own. RLS keeps
+  // the update to this cook's own options.
+  async function quickSoldOut(itemKey: string, optionId: string, soldOut: boolean): Promise<string | null> {
+    const { data, error: updateError } = await supabase
+      .from("menu_options")
+      .update({ sold_out: soldOut })
+      .eq("id", optionId)
+      .select("id");
+    const message = describeSoldOutResult(updateError, data);
+    if (message) {
+      if (updateError) console.error("KitchenSetupForm: couldn't change sold out", updateError);
+      return message;
+    }
+    // Keep the form and the saved copy in step, so Save neither undoes it
+    // nor counts it as a change.
+    savedAddons.current = Object.fromEntries(
+      Object.entries(savedAddons.current).map(([dishId, groups]) => [dishId, withSoldOut(groups, optionId, soldOut)])
+    );
+    setItems((prev) => prev.map((it) => (it.key === itemKey ? { ...it, addons: withSoldOut(it.addons, optionId, soldOut) } : it)));
+    return null;
   }
 
   return (
@@ -682,6 +810,22 @@ export function KitchenSetupForm({
                     </span>
                   )}
                 </div>
+                {addonsAvailable ? (
+                  <MenuItemAddons
+                    groups={it.addons}
+                    onChange={(addons) => {
+                      setTouched(true);
+                      updateItem(it.key, { addons });
+                    }}
+                    errors={addonErrors.fields}
+                    formError={addonErrors.dishes[it.key]}
+                    onQuickSoldOut={(optionId, soldOut) => quickSoldOut(it.key, optionId, soldOut)}
+                  />
+                ) : (
+                  <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                    Add-ons couldn&apos;t be loaded right now, so they&apos;re hidden. Reload the page to edit them.
+                  </p>
+                )}
               </div>
             ))}
           </section>
