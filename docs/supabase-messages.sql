@@ -177,6 +177,9 @@ create policy "Order chat participants can upload photos"
 
 -- ----------------------------------------------------------------------------
 -- 6. PROOF OF DELIVERY
+-- NOTE: the photo is now OPTIONAL — docs/supabase-optional-delivery-photo.sql
+-- replaces complete_delivery_with_proof() and require_delivery_proof() below.
+-- Run that file after this one.
 -- A rider can only mark their delivery completed together with a photo: the
 -- app uploads the photo to order-chat-photos first (while the chat is still
 -- open, so the section 5 policies allow it), then calls

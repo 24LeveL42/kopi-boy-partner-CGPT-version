@@ -116,12 +116,17 @@ export async function markCollectedAs(
   }
 }
 
-/** Posts the proof photo (already uploaded by the rider) and completes the delivery in one transaction. */
+/**
+ * Completes the delivery. The photo is optional: when the rider attached one
+ * (already uploaded), it's posted to the customer in the same transaction;
+ * with none, the delivery is just completed
+ * (docs/supabase-optional-delivery-photo.sql).
+ */
 export async function completeDeliveryAs(
   client: DeliveryClient,
   userId: string,
   requestId: string,
-  photoPath: string
+  photoPath: string | null
 ): Promise<RiderActionResult> {
   try {
     if (!requestId) return { ok: false, error: "This delivery request is missing." };
@@ -134,7 +139,7 @@ export async function completeDeliveryAs(
 
     const { error } = await client.rpc("complete_delivery_with_proof", {
       p_request_id: requestId,
-      p_photo_path: photoPath,
+      p_photo_path: photoPath || null,
     });
     return error ? fromDbError(error) : { ok: true };
   } catch {

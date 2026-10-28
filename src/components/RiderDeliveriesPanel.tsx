@@ -65,7 +65,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { busy, isRunning, run } = usePendingAction();
-  // Proof-of-delivery step: "Mark delivered" opens it, and completing needs a photo.
+  // "Mark delivered" opens the confirm step; a photo for the customer is optional.
   const [proofOpen, setProofOpen] = useState(false);
   // "I've collected the food" asks once more before it notifies the customer.
   const [collectConfirmOpen, setCollectConfirmOpen] = useState(false);
@@ -230,21 +230,24 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
     setProof(file);
   }
 
-  // Upload first (the chat, and so the bucket, is only open while the delivery
-  // is accepted), then post the photo message and complete the delivery in one
-  // transaction — see complete_delivery_with_proof in docs/supabase-messages.sql.
+  // The photo is optional. If one is attached, upload it first (the chat, and
+  // so the bucket, is only open while the delivery is accepted), then post it
+  // and complete the delivery in one transaction — see
+  // docs/supabase-optional-delivery-photo.sql. Without one, just complete.
   function markDelivered() {
-    if (!myDelivery || !proofPhoto) return;
+    if (!myDelivery) return;
     const delivery = myDelivery;
     const photo = proofPhoto;
     run(`${delivery.id}:deliver`, async () => {
       setError(null);
 
       let path = proofPath;
-      if (!path) {
+      if (photo && !path) {
         path = await uploadOrderChatPhoto(supabase, delivery.order_id, riderId, photo);
         if (!path) {
-          setError("Photo couldn't be uploaded — the delivery is not marked delivered yet. Please try again.");
+          setError(
+            "Photo couldn't be uploaded — the delivery is not marked delivered yet. Please try again, or remove the photo to confirm without it."
+          );
           return;
         }
         setProofPath(path);
@@ -351,9 +354,9 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
             )
           ) : proofOpen ? (
             <div className="mt-3 rounded-2xl p-3" style={{ background: "var(--kb-cream)" }}>
-              <p className="text-sm font-semibold">Proof of delivery</p>
+              <p className="text-sm font-semibold">Mark as delivered</p>
               <p className="mt-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                Attach a photo of the handed-over order. It&apos;s posted to the customer chat when you confirm.
+                You can send the customer a photo of the delivery if you like. It&apos;s optional.
               </p>
 
               <input
@@ -362,14 +365,14 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
                 accept={ORDER_CHAT_PHOTO_TYPES.join(",")}
                 onChange={handleProofPicked}
                 className="hidden"
-                aria-label="Attach proof-of-delivery photo"
+                aria-label="Add an optional delivery photo"
               />
               {proofPhoto ? (
                 <div className="mt-2">
                   {proofPreview && (
                     // Local object URL of the picked file — nothing for next/image to optimise.
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={proofPreview} alt="Proof-of-delivery photo" className="max-h-48 w-full rounded-xl object-cover" />
+                    <img src={proofPreview} alt="Delivery photo" className="max-h-48 w-full rounded-xl object-cover" />
                   )}
                   <div className="mt-1 flex items-center justify-between gap-2 text-xs">
                     <span className="truncate">📎 {proofPhoto.name}</span>
@@ -392,18 +395,18 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
                   className="mt-2 w-full rounded-xl border border-dashed py-3 text-sm font-semibold disabled:opacity-60"
                   style={{ borderColor: "var(--kb-navy-line)", color: "var(--kb-ink-soft)" }}
                 >
-                  Attach photo
+                  Add a delivery photo (optional)
                 </button>
               )}
 
               <button
                 onClick={markDelivered}
-                disabled={!proofPhoto || busy}
+                disabled={busy}
                 className="mt-3 w-full rounded-2xl py-3 text-sm font-semibold text-white disabled:opacity-60"
                 style={{ background: "linear-gradient(110deg,var(--kb-purple),#6940D7)" }}
               >
                 <PendingLabel pending={isRunning(`${myDelivery.id}:deliver`)} pendingText="Confirming delivery…">
-                  {proofPhoto ? "Confirm delivered" : "Attach a photo to confirm"}
+                  Confirm delivered
                 </PendingLabel>
               </button>
               <button

@@ -27,8 +27,9 @@ export async function markCollected(requestId: string): Promise<RiderActionResul
   return asSignedInRider((supabase, userId) => markCollectedAs(supabase, userId, String(requestId ?? "")));
 }
 
-export async function completeDelivery(requestId: string, photoPath: string): Promise<RiderActionResult> {
+// photoPath is optional: null (or empty) completes the delivery without a photo.
+export async function completeDelivery(requestId: string, photoPath?: string | null): Promise<RiderActionResult> {
   return asSignedInRider((supabase, userId) =>
-    completeDeliveryAs(supabase, userId, String(requestId ?? ""), String(photoPath ?? ""))
+    completeDeliveryAs(supabase, userId, String(requestId ?? ""), photoPath ? String(photoPath) : null)
   );
 }

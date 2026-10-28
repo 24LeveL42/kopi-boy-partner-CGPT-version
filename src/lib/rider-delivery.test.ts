@@ -160,6 +160,36 @@ describe("completeDeliveryAs", () => {
   });
 });
 
+describe("completeDeliveryAs — photo is optional", () => {
+  for (const photo of [null, ""]) {
+    it(`completes with no photo (${JSON.stringify(photo)}) and sends p_photo_path null`, async () => {
+      const { client, writes } = fakeClient();
+      assert.deepEqual(await completeDeliveryAs(client, "rider-1", "req-1", photo), { ok: true });
+      assert.deepEqual(writes, [
+        { kind: "rpc", fn: "complete_delivery_with_proof", args: { p_request_id: "req-1", p_photo_path: null } },
+      ]);
+    });
+  }
+
+  it("still refuses a blocked rider without a photo", async () => {
+    const { client, writes } = fakeClient({ profile: { role: "rider", is_active: false } });
+    assert.deepEqual(await completeDeliveryAs(client, "rider-1", "req-1", null), BLOCKED);
+    assert.equal(writes.length, 0);
+  });
+
+  it("still requires the food to be collected first without a photo", async () => {
+    const { client, writes } = fakeClient({ delivery: { rider_id: "rider-1", status: "accepted", picked_up_at: null } });
+    assert.deepEqual(await completeDeliveryAs(client, "rider-1", "req-1", null), { ok: false, error: COLLECT_FIRST_MESSAGE });
+    assert.equal(writes.length, 0);
+  });
+
+  it("still refuses someone else's delivery without a photo", async () => {
+    const { client, writes } = fakeClient({ delivery: { rider_id: "rider-2", status: "accepted", picked_up_at: COLLECTED_AT } });
+    assert.equal((await completeDeliveryAs(client, "rider-1", "req-1", null)).ok, false);
+    assert.equal(writes.length, 0);
+  });
+});
+
 describe("isCollected", () => {
   it("is false only while picked_up_at is null", () => {
     assert.equal(isCollected({ picked_up_at: null }), false);
