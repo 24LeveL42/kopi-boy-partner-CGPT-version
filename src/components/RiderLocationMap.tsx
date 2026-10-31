@@ -3,9 +3,10 @@
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 import type * as Leaflet from "leaflet";
-import type { Marker, Circle, Map as LeafletMap } from "leaflet";
+import type { Marker, Circle, Polyline, Map as LeafletMap } from "leaflet";
 import { createClient } from "@/lib/supabase/client";
-import { riderIcon } from "@/lib/riderIcon";
+import { dropoffIcon, riderIcon } from "@/lib/riderIcon";
+import type { LatLngTuple } from "@/lib/rider-line";
 
 interface RiderLiveLocation {
   delivery_request_id: string;
@@ -24,6 +25,11 @@ const STALE_MS = 2 * 60_000;
 const POLL_MS = 15_000;
 // Leaflet draws paths as SVG attributes, which can't read CSS variables.
 const PURPLE = "#7B3FE4";
+const GREY = "#6B7280";
+
+function lineStyle(stale: boolean) {
+  return { color: stale ? GREY : PURPLE, weight: 2, opacity: stale ? 0.8 : 0.9, dashArray: "6 6", interactive: false };
+}
 
 // Same rule riderIcon uses to mirror the scooter (heading west).
 function facesWest(heading: number | null) {
@@ -39,9 +45,18 @@ function agoLabel(ms: number) {
 /**
  * Live map of the rider for one delivery. Rows only exist while the rider has
  * "Share my live location" on, and RLS limits them to the delivery's cook and
- * customer. Only the rider is drawn — never the kitchen.
+ * customer. The kitchen is never drawn. After pickup the order card passes
+ * `dropoff` (the customer's own orders.customer_lat/lng, via pickLineTarget)
+ * and a dashed straight line runs from the rider to a drop-off pin; before
+ * pickup it's null and only the rider shows.
  */
-export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: string }) {
+export function RiderLocationMap({
+  deliveryRequestId,
+  dropoff = null,
+}: {
+  deliveryRequestId: string;
+  dropoff?: LatLngTuple | null;
+}) {
   const [location, setLocation] = useState<RiderLiveLocation | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -51,6 +66,13 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
   const leafletRef = useRef<typeof Leaflet | null>(null);
   const markerRef = useRef<Marker | null>(null);
   const accuracyRef = useRef<Circle | null>(null);
+  const lineRef = useRef<Polyline | null>(null);
+  const dropoffMarkerRef = useRef<Marker | null>(null);
+  // Fit rider + drop-off into view once per map; after that only pan.
+  const fittedRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
+  const dropLat = dropoff?.[0] ?? null;
+  const dropLng = dropoff?.[1] ?? null;
   // "stale|west" for the icon currently on the marker, so it's only rebuilt
   // (restarting the pulse) when its look changes.
   const iconKeyRef = useRef("");
@@ -146,11 +168,14 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
       markerRef.current = L.marker(pos, {
         icon: riderIcon(L, { heading, stale: startStale }),
         keyboard: false,
+        // Always above the drop-off pin.
+        zIndexOffset: 1000,
       })
         .bindTooltip("Rider")
         .addTo(map);
       leafletRef.current = L;
       mapRef.current = map;
+      setMapReady(true);
     });
 
     return () => {
@@ -159,7 +184,11 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
       mapRef.current = null;
       markerRef.current = null;
       accuracyRef.current = null;
+      lineRef.current = null;
+      dropoffMarkerRef.current = null;
+      fittedRef.current = false;
       iconKeyRef.current = "";
+      setMapReady(false);
     };
   }, [hasRow]);
 
@@ -177,8 +206,37 @@ export function RiderLocationMap({ deliveryRequestId }: { deliveryRequestId: str
       markerRef.current?.setIcon(riderIcon(L, { heading, stale }));
     }
     accuracyRef.current?.setLatLng(pos).setRadius(Number(location.accuracy_m ?? 0));
+
+    // Line + drop-off pin: added when pickup flips dropoff on (no map
+    // rebuild), moved with the rider, removed if dropoff goes away.
+    if (dropLat !== null && dropLng !== null) {
+      const target: [number, number] = [dropLat, dropLng];
+      if (lineRef.current) lineRef.current.setLatLngs([pos, target]).setStyle(lineStyle(stale));
+      else lineRef.current = L.polyline([pos, target], lineStyle(stale)).addTo(map);
+      if (dropoffMarkerRef.current) dropoffMarkerRef.current.setLatLng(target);
+      else
+        dropoffMarkerRef.current = L.marker(target, { icon: dropoffIcon(L), keyboard: false })
+          .bindTooltip("Drop-off")
+          .addTo(map);
+      if (!fittedRef.current) {
+        fittedRef.current = true;
+        // Extra top-left room keeps the pin clear of the zoom buttons; bottom-right
+        // clears the attribution.
+        map.fitBounds(L.latLngBounds([pos, target]), {
+          paddingTopLeft: [56, 40],
+          paddingBottomRight: [32, 32],
+          maxZoom: 17,
+        });
+        return;
+      }
+    } else {
+      lineRef.current?.remove();
+      lineRef.current = null;
+      dropoffMarkerRef.current?.remove();
+      dropoffMarkerRef.current = null;
+    }
     if (!map.getBounds().contains(pos)) map.panTo(pos);
-  }, [location, stale]);
+  }, [location, stale, mapReady, dropLat, dropLng]);
 
   return (
     <div className="overflow-hidden rounded-2xl border bg-white" style={{ borderColor: "#E8DFFF", color: "var(--kb-ink)" }}>

@@ -12,6 +12,7 @@ import { canShowRequestRider, cookCardStage, riderView, type RiderStage } from "
 // orderTotal is what the cook should look for in their bank app.
 import { orderDeliveryFee, orderDiscount, orderTotal } from "@/lib/order-amounts";
 import { orderLine } from "@/lib/order-lines";
+import { riderMapProps } from "@/lib/rider-line";
 
 export interface OrderWithDelivery extends OrderWithItems {
   delivery_requests: DeliveryRequest[];
@@ -276,7 +277,7 @@ export function CookOrderCard(props: CookOrderCardProps) {
       )}
 
       {rider.request && (rider.stage === "accepted" || rider.stage === "picked_up") && (
-        <RiderPanel {...props} requestId={rider.request.id} />
+        <RiderPanel {...props} request={rider.request} />
       )}
     </div>
   );
@@ -299,7 +300,8 @@ function RequestRiderButton({ order: o, now, busy, isRunning, onRequestRider }: 
   );
 }
 
-function RiderPanel({ requestId, kitchenId, riderDetails, chatOpen, onToggleChat, trackingOpen, onToggleTracking }: CookOrderCardProps & { requestId: string }) {
+function RiderPanel({ order, request, kitchenId, riderDetails, chatOpen, onToggleChat, trackingOpen, onToggleTracking }: CookOrderCardProps & { request: DeliveryRequest }) {
+  const requestId = request.id;
   const rider = riderDetails[requestId];
   return (
     <div className="mt-3 overflow-hidden rounded-2xl" style={{ background: "linear-gradient(135deg, #F4EEFF 0%, #F8FAFC 100%)", border: "1px solid #E8DFFF" }}>
@@ -338,7 +340,7 @@ function RiderPanel({ requestId, kitchenId, riderDetails, chatOpen, onToggleChat
         <button type="button" onClick={onToggleTracking} aria-expanded={trackingOpen} className="w-full rounded-xl bg-white py-2.5 text-xs font-bold" style={{ color: "var(--kb-purple)" }}>
           {trackingOpen ? "Hide rider map" : "📍 Track rider"}
         </button>
-        {trackingOpen && <div className="mt-2"><RiderLocationMap deliveryRequestId={requestId} /></div>}
+        {trackingOpen && <div className="mt-2"><RiderLocationMap {...riderMapProps(order, request)} /></div>}
       </div>
     </div>
   );

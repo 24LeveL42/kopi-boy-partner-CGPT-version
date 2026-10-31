@@ -324,8 +324,13 @@ body {
 }
 
 /* Live rider marker on RiderLocationMap (Leaflet divIcon, see src/lib/riderIcon.ts) */
-.kb-rider { position: relative; width: 52px; height: 52px; filter: drop-shadow(0 3px 6px rgba(34,22,56,.35)); }
-.kb-rider__icon { position: relative; z-index: 1; transition: transform .2s; }
-.kb-rider__pulse { position: absolute; inset: 4px; border-radius: 9999px; background: rgba(124,58,237,.35); animation: kb-rider-pulse 1.8s ease-out infinite; }
+.kb-rider { position: relative; width: 24px; height: 24px; filter: drop-shadow(0 1px 3px rgba(34,22,56,.4)); }
+.kb-rider__icon { position: relative; z-index: 1; width: 24px; height: 24px; transition: transform .2s; }
+.kb-rider__icon svg { display: block; }
+/* Grows from the 24px disc to about 36px, then fades. */
+.kb-rider__pulse { position: absolute; inset: 0; border-radius: 9999px; background: rgba(124,58,237,.35); animation: kb-rider-pulse 1.8s ease-out infinite; }
 .kb-rider--stale .kb-rider__icon { filter: grayscale(1) opacity(.6); }
-@keyframes kb-rider-pulse { 0% { transform: scale(.8); opacity: .8; } 100% { transform: scale(1.7); opacity: 0; } }
+@keyframes kb-rider-pulse { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(1.5); opacity: 0; } }
+/* Drop-off pin (src/lib/riderIcon.ts dropoffIcon), shown with the line after pickup */
+.kb-dropoff { width: 20px; height: 26px; filter: drop-shadow(0 1px 2px rgba(34,22,56,.4)); }
+.kb-dropoff svg { display: block; }

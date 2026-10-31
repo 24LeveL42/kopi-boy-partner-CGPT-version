@@ -62,6 +62,11 @@ export interface Order extends OrderDeliveryDetails {
   // Rider fee quoted to the customer at checkout. The customer PayNows the
   // food total + this fee; the cook hands the fee to the rider at pickup.
   delivery_fee_estimate: number | null;
+  // The customer's drop-off point, captured at checkout (Customer repo); null
+  // on older orders. Postgres numeric may arrive as a string. Only used for
+  // the tracking map's line after pickup (riderMapProps).
+  customer_lat?: number | string | null;
+  customer_lng?: number | string | null;
   decided_at: string | null;
   paid_at: string | null;
   ready_at: string | null;
