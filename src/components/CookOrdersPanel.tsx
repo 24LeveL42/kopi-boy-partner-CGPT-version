@@ -1,89 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useLiveRefresh } from "@/lib/use-live-refresh";
 import { usePendingAction } from "@/lib/use-pending-action";
 import { PendingLabel } from "./Pending";
 import { SkeletonCards } from "./Skeleton";
-import type { Order, OrderWithItems } from "@/lib/types-orders";
-import type { DeliveryRequest, DeliveryRiderDetails } from "@/lib/types-delivery";
-import { PartnerRiderChat } from "./PartnerRiderChat";
-import { RiderLocationMap } from "./RiderLocationMap";
+import type { OrderWithItems } from "@/lib/types-orders";
+import type { DeliveryRiderDetails } from "@/lib/types-delivery";
 import { OrderDeliveryInfo } from "./OrderDeliveryInfo";
+import { CookOrderCard, OrderAmounts, OrderLines, proofState, shortId, type OrderWithDelivery } from "./CookOrderCard";
+import { riderView } from "@/lib/cook-order-card";
 import { requestRider as requestRiderAction } from "@/lib/cook-order-actions";
-import { canRequestRiderAt, riderRequestOpensLabel } from "@/lib/rider-request";
 import { cookOrderFinishedAt, cookOrderOutcome, formatFinishedAt, isCookOrderFinished, isMissingHiddenColumn, newestFirst } from "@/lib/past-orders";
 import { hideAllCookOrders, hideCookOrder } from "@/lib/past-orders-actions";
 import { PastOrdersSection } from "./PastOrdersSection";
-// The customer PayNows the food total (after any deal) + delivery fee, so
-// orderTotal is what the cook should look for in their bank app.
-import { orderDeliveryFee, orderDiscount, orderTotal } from "@/lib/order-amounts";
-import { isOrderOptionsUnavailable, orderLine } from "@/lib/order-lines";
-
-interface OrderWithDelivery extends OrderWithItems {
-  delivery_requests: DeliveryRequest[];
-}
-
-// Cooks can't read the customer's profile (no RLS policy grants that), so
-// order cards are identified by a short id + timestamp, not a customer name.
-function shortId(id: string) {
-  return id.slice(0, 8).toUpperCase();
-}
-
-// One row per dish: "Laksa x2  (Hot, Extra egg)" with its line total
-// (dish price + add-ons) × quantity on the right.
-function OrderLines({ order }: { order: OrderWithItems }) {
-  return (
-    <ul className="mt-1 space-y-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-      {order.order_items.map((item, i) => {
-        const line = orderLine(item);
-        return (
-          <li key={item.id ?? i} className="flex justify-between gap-3">
-            <span className="min-w-0">
-              <span style={{ color: "var(--kb-ink)" }}>{line.label}</span>
-              {line.options && <span> ({line.options})</span>}
-            </span>
-            <span className="shrink-0">S${line.total.toFixed(2)}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
+import { orderTotal } from "@/lib/order-amounts";
+import { isOrderOptionsUnavailable } from "@/lib/order-lines";
 
 const PAYMENT_PROOF_BUCKET = "payment-proofs";
 const PAYMENT_PROOF_URL_TTL_SECONDS = 60 * 60;
 
-// "current" = a proof the cook hasn't rejected yet; "rejected" = the cook
-// said the money didn't arrive and no newer proof has been uploaded since.
-type ProofState = "none" | "current" | "rejected";
-
-function proofState(order: Order): ProofState {
-  if (!order.payment_proof_path) return "none";
-  if (!order.payment_proof_rejected_at) return "current";
-  const rejected = new Date(order.payment_proof_rejected_at).getTime();
-  const uploaded = order.payment_proof_uploaded_at ? new Date(order.payment_proof_uploaded_at).getTime() : NaN;
-  return uploaded > rejected ? "current" : "rejected";
-}
-
-
-function timeAgo(iso: string) {
-  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} hr ago`;
-  const d = Math.floor(h / 24);
-  return `${d} day${d === 1 ? "" : "s"} ago`;
-}
-
 export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
   const supabase = createClient();
   const [newOrders, setNewOrders] = useState<OrderWithItems[]>([]);
-  const [awaitingPayment, setAwaitingPayment] = useState<OrderWithItems[]>([]);
-  const [inKitchen, setInKitchen] = useState<OrderWithDelivery[]>([]);
+  // Every accepted order, one card each (CookOrderCard), from payment to delivery.
+  const [activeOrders, setActiveOrders] = useState<OrderWithDelivery[]>([]);
+  const awaitingPayment = useMemo(() => activeOrders.filter((o) => o.payment_status === "unpaid"), [activeOrders]);
+  const paidOrders = activeOrders.filter((o) => o.payment_status === "paid");
   const [pastOrders, setPastOrders] = useState<OrderWithDelivery[]>([]);
   const [riderDetails, setRiderDetails] = useState<Record<string, DeliveryRiderDetails>>({});
   const [openChatId, setOpenChatId] = useState<string | null>(null);
@@ -93,7 +37,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { busy, isRunning, run } = usePendingAction();
-  // Ticks so a scheduled order's "Request a rider" enables on time. Only
+  // Ticks so a scheduled order's "Request rider" enables on time. Only
   // drives the button — the server action and the database check the real clock.
   const [now, setNow] = useState(() => Date.now());
 
@@ -135,8 +79,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
     const rows = all.filter((o) => !isCookOrderFinished(o));
     setPastOrders(newestFirst(all.filter((o) => isCookOrderFinished(o)), cookOrderFinishedAt));
     setNewOrders(rows.filter((o) => o.order_status === "placed"));
-    setAwaitingPayment(rows.filter((o) => o.order_status === "accepted" && o.payment_status === "unpaid"));
-    setInKitchen(rows.filter((o) => o.order_status === "accepted"));
+    setActiveOrders(rows.filter((o) => o.order_status === "accepted"));
 
     // Rider profile data is intentionally protected by RLS. The RPC exposes
     // only the minimum rider details to the cook who owns this delivery.
@@ -296,8 +239,8 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Current order summary">
         <Metric label="Needs attention" value={newOrders.length + awaitingPayment.length} tone="purple" />
-        <Metric label="Preparing" value={inKitchen.filter((o) => o.preparation_status === "preparing").length} tone="teal" />
-        <Metric label="Ready" value={inKitchen.filter((o) => o.preparation_status === "ready").length} tone="neutral" />
+        <Metric label="Preparing" value={paidOrders.filter((o) => o.preparation_status === "preparing").length} tone="teal" />
+        <Metric label="Ready" value={paidOrders.filter((o) => o.preparation_status === "ready").length} tone="neutral" />
       </div>
       {error && (
         <p className="rounded-xl px-3 py-2 text-xs" style={{ background: "#FEF0F0", color: "#B42318" }}>
@@ -350,224 +293,39 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
 
       <section>
         <h3 className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-ink-soft)" }}>
-          Awaiting PayNow
+          Orders in progress
         </h3>
-        {awaitingPayment.length === 0 ? (
+        {activeOrders.length === 0 ? (
           <p className="mt-2 rounded-2xl bg-white p-4 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
-            No accepted orders waiting on payment.
+            No accepted orders right now.
           </p>
         ) : (
           <div className="mt-2 space-y-2">
-            {awaitingPayment.map((o) => {
-              const proof = proofState(o);
-              const proofUrl = proof === "current" ? proofUrls[o.payment_proof_path!] : undefined;
+            {activeOrders.map((o) => {
+              // The request the rider panel's chat and map are about.
+              const riderRequestId = riderView(o.delivery_requests).request?.id ?? null;
               return (
-                <div key={o.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-                  {/* Same "#" + 8-char reference the Customer app shows, so cooks can match it to the PayNow comment. */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-ink-soft)" }}>Order</p>
-                      <p className="font-mono text-base font-bold tracking-wide">#{shortId(o.id)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-ink-soft)" }}>You should receive</p>
-                      <p className="text-base font-bold" style={{ color: "var(--kb-purple)" }}>S${orderTotal(o).toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <OrderLines order={o} />
-                  <OrderDeliveryInfo details={o} />
-                  <OrderAmounts order={o} />
-
-                  {proof === "current" && (
-                    <div className="mt-3 flex items-center gap-3 rounded-xl p-2" style={{ background: "var(--kb-tint)" }}>
-                      {proofUrl ? (
-                        <a href={proofUrl} target="_blank" rel="noopener noreferrer" className="shrink-0" aria-label="Open payment proof full size">
-                          {/* Short-lived signed URL from a private bucket — next/image can't (and shouldn't) cache it. */}
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={proofUrl} alt="Payment proof" className="h-16 w-16 rounded-lg object-cover ring-2 ring-white" />
-                        </a>
-                      ) : (
-                        <div className="h-16 w-16 shrink-0 animate-pulse rounded-lg bg-white" aria-label="Loading payment proof" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold">Payment proof</p>
-                        {o.payment_proof_uploaded_at && (
-                          <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>Uploaded {timeAgo(o.payment_proof_uploaded_at)}</p>
-                        )}
-                        {proofUrl && <p className="text-xs font-semibold" style={{ color: "var(--kb-purple)" }}>Tap to view full size</p>}
-                      </div>
-                    </div>
-                  )}
-                  {proof === "none" && (
-                    <p className="mt-3 rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: "var(--kb-field)", color: "var(--kb-ink-soft)" }}>
-                      Waiting for the customer&apos;s proof of payment
-                    </p>
-                  )}
-                  {proof === "rejected" && (
-                    <p className="mt-3 rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
-                      You told the customer the payment wasn&apos;t received. Waiting for a new proof.
-                    </p>
-                  )}
-
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => markPaid(o.id)}
-                      disabled={busy}
-                      className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                      style={{ background: "var(--kb-green-deep)" }}
-                    >
-                      <PendingLabel pending={isRunning(`${o.id}:paid`)} pendingText="Saving…">Payment received</PendingLabel>
-                    </button>
-                    {proof === "current" && (
-                      <button
-                        onClick={() => rejectProof(o.id)}
-                        disabled={busy}
-                        className="flex-1 rounded-xl py-2.5 text-sm font-semibold disabled:opacity-60"
-                        style={{ background: "#FEF0F0", color: "#B42318" }}
-                      >
-                        <PendingLabel pending={isRunning(`${o.id}:proof-rejected`)} pendingText="Saving…">Not received</PendingLabel>
-                      </button>
-                    )}
-                  </div>
-                  <p className="mt-2 text-[11px]" style={{ color: "var(--kb-ink-soft)" }}>
-                    Check your bank app for the full total of S${orderTotal(o).toFixed(2)}. Only tap Payment received if that amount is in your account.
-                  </p>
-                </div>
+                <CookOrderCard
+                  key={o.id}
+                  order={o}
+                  kitchenId={kitchenId}
+                  riderDetails={riderDetails}
+                  proofUrl={proofState(o) === "current" ? proofUrls[o.payment_proof_path!] : undefined}
+                  now={now}
+                  busy={busy}
+                  isRunning={isRunning}
+                  onMarkPaid={() => markPaid(o.id)}
+                  onRejectProof={() => rejectProof(o.id)}
+                  onStartCooking={() => startCooking(o.id)}
+                  onMarkReady={() => markReady(o.id)}
+                  onRequestRider={() => requestRider(o.id)}
+                  chatOpen={riderRequestId !== null && openChatId === riderRequestId}
+                  onToggleChat={() => setOpenChatId(openChatId === riderRequestId ? null : riderRequestId)}
+                  trackingOpen={riderRequestId !== null && trackingId === riderRequestId}
+                  onToggleTracking={() => setTrackingId(trackingId === riderRequestId ? null : riderRequestId)}
+                />
               );
             })}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h3 className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-ink-soft)" }}>
-          In the kitchen
-        </h3>
-        {inKitchen.length === 0 ? (
-          <p className="mt-2 rounded-2xl bg-white p-4 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
-            No accepted orders in prep right now.
-          </p>
-        ) : (
-          <div className="mt-2 space-y-2">
-            {inKitchen.map((o) => (
-              <div key={o.id} className="partner-order-card rounded-2xl bg-white p-4" style={{ color: "var(--kb-ink)" }}>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">Order #{shortId(o.id)}</p>
-                  <p className="text-sm font-semibold">S${orderTotal(o).toFixed(2)}</p>
-                </div>
-                <OrderLines order={o} />
-                <OrderDeliveryInfo details={o} />
-                <OrderAmounts order={o} />
-                {o.preparation_status === "not_started" && (
-                  <button
-                    onClick={() => startCooking(o.id)}
-                    disabled={busy}
-                    className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                    style={{ background: "var(--kb-green-deep)" }}
-                  >
-                    <PendingLabel pending={isRunning(`${o.id}:cook`)} pendingText="Starting…">Start Cooking</PendingLabel>
-                  </button>
-                )}
-                {o.preparation_status === "preparing" && (
-                  <button
-                    onClick={() => markReady(o.id)}
-                    disabled={busy}
-                    className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                    style={{ background: "var(--kb-purple)" }}
-                  >
-                    <PendingLabel pending={isRunning(`${o.id}:ready`)} pendingText="Marking ready…">Mark Ready — Looking for Rider</PendingLabel>
-                  </button>
-                )}
-                {o.preparation_status === "ready" && (() => {
-                  const requests = o.delivery_requests ?? [];
-                  const active = requests.find((r) => r.status === "open" || r.status === "accepted");
-                  const delivered = requests.some((r) => r.status === "completed");
-
-                  if (active) {
-                    const rider = active.status === "accepted" ? riderDetails[active.id] : undefined;
-                    return (
-                      <div className="mt-3 overflow-hidden rounded-2xl" style={{ background: "linear-gradient(135deg, #F4EEFF 0%, #F8FAFC 100%)", border: "1px solid #E8DFFF" }}>
-                        {active.status === "accepted" ? (
-                          <>
-                            <div className="flex items-center gap-3 p-3">
-                              {rider?.photo_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={rider.photo_url} alt="Rider" className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm" />
-                              ) : (
-                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white shadow-sm" style={{ background: "linear-gradient(135deg,var(--kb-purple),var(--kb-green))" }}>
-                                  {(rider?.full_name?.trim()?.[0] ?? "R").toUpperCase()}
-                                </div>
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <p className="truncate text-sm font-bold">{rider?.full_name ?? "Rider assigned"}</p>
-                                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase" style={{ background: "#D7F5E7", color: "var(--kb-green-deep)" }}>
-                                    Rider assigned
-                                  </span>
-                                </div>
-                                {rider?.phone && <p className="mt-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>📱 {rider.phone}</p>}
-                                <div className="mt-1 flex flex-wrap gap-1.5">
-                                  {rider?.vehicle_type && <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold" style={{ color: "var(--kb-ink-soft)" }}>🛵 {rider.vehicle_type}</span>}
-                                  {rider?.license_plate && <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold" style={{ color: "var(--kb-ink-soft)" }}>🔢 {rider.license_plate}</span>}
-                                </div>
-                              </div>
-                            </div>
-                            {active.picked_up_at && (
-                              <p className="border-t px-3 py-2 text-center text-xs font-bold" style={{ borderColor: "#E8DFFF", background: "#E5F7EF", color: "var(--kb-green-deep)" }}>
-                                ✓ Rider has collected the food
-                              </p>
-                            )}
-                            <div className="grid grid-cols-2 gap-2 border-t p-3" style={{ borderColor: "#E8DFFF" }}>
-                              {rider?.phone ? (
-                                <a href={`tel:${rider.phone}`} className="flex items-center justify-center rounded-xl bg-white py-2.5 text-xs font-bold" style={{ color: "var(--kb-purple)" }}>
-                                  📞 Call Rider
-                                </a>
-                              ) : (
-                                <div className="rounded-xl bg-white py-2.5 text-center text-xs font-semibold" style={{ color: "var(--kb-ink-soft)" }}>Rider assigned</div>
-                              )}
-                              <button type="button" onClick={() => setOpenChatId(openChatId === active.id ? null : active.id)} className="rounded-xl py-2.5 text-xs font-bold text-white" style={{ background: "linear-gradient(135deg,var(--kb-purple),var(--kb-purple-deep))" }}>
-                                {openChatId === active.id ? "Close Chat" : "💬 Chat with Rider"}
-                              </button>
-                            </div>
-                            {openChatId === active.id && <div className="border-t p-3" style={{ borderColor: "#E8DFFF" }}><PartnerRiderChat deliveryRequestId={active.id} userId={kitchenId} /></div>}
-                            <div className="border-t p-3" style={{ borderColor: "#E8DFFF" }}>
-                              <button type="button" onClick={() => setTrackingId(trackingId === active.id ? null : active.id)} aria-expanded={trackingId === active.id} className="w-full rounded-xl bg-white py-2.5 text-xs font-bold" style={{ color: "var(--kb-purple)" }}>
-                                {trackingId === active.id ? "Hide rider map" : "📍 Track rider"}
-                              </button>
-                              {trackingId === active.id && <div className="mt-2"><RiderLocationMap deliveryRequestId={active.id} /></div>}
-                            </div>
-                          </>
-                        ) : (
-                          <p className="p-3 text-center text-sm font-semibold" style={{ color: "var(--kb-ink-soft)" }}>Waiting for a rider</p>
-                        )}
-                      </div>
-                    );
-                  }
-
-                  if (delivered) {
-                    return (
-                      <p className="mt-3 text-center text-sm font-semibold" style={{ color: "var(--kb-green-deep)" }}>
-                        Delivered
-                      </p>
-                    );
-                  }
-
-                  const tooEarly = !canRequestRiderAt(o.scheduled_for, now);
-                  return (
-                    <button
-                      onClick={() => requestRider(o.id)}
-                      disabled={busy || tooEarly}
-                      className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                      style={{ background: "var(--kb-purple)" }}
-                    >
-                      <PendingLabel pending={isRunning(`${o.id}:rider`)} pendingText="Requesting…">
-                        {tooEarly ? riderRequestOpensLabel(o.scheduled_for) : "Request a rider"}
-                      </PendingLabel>
-                    </button>
-                  );
-                })()}
-              </div>
-            ))}
           </div>
         )}
       </section>
@@ -621,32 +379,5 @@ function CookPastOrder({ order }: { order: OrderWithDelivery }) {
       <OrderLines order={order} />
       <OrderDeliveryInfo details={order} />
     </>
-  );
-}
-
-function OrderAmounts({ order }: { order: Order }) {
-  const discount = orderDiscount(order);
-  return (
-    <div className="mt-3 rounded-xl p-3 text-xs" style={{ background: "var(--kb-field)" }}>
-      <div className="flex justify-between" style={{ color: "var(--kb-ink-soft)" }}>
-        <span>Food subtotal</span>
-        <span>S${Number(order.subtotal).toFixed(2)}</span>
-      </div>
-      {discount > 0 && (
-        <div className="mt-1 flex justify-between gap-3" style={{ color: "var(--kb-green-deep)" }}>
-          <span className="min-w-0 truncate">Deal{order.promotion_label ? ` · ${order.promotion_label}` : ""}</span>
-          <span className="shrink-0">-S${discount.toFixed(2)}</span>
-        </div>
-      )}
-      <div className="mt-1 flex justify-between" style={{ color: "var(--kb-ink-soft)" }}>
-        <span>Delivery fee</span>
-        <span>S${orderDeliveryFee(order).toFixed(2)}</span>
-      </div>
-      <p className="text-[11px]" style={{ color: "var(--kb-ink-soft)" }}>You pay this fee to the rider at pickup.</p>
-      <div className="mt-2 flex justify-between border-t pt-2 text-sm font-bold" style={{ borderColor: "#E8DFFF", color: "var(--kb-ink)" }}>
-        <span>Customer pays in total</span>
-        <span style={{ color: "var(--kb-purple)" }}>S${orderTotal(order).toFixed(2)}</span>
-      </div>
-    </div>
   );
 }

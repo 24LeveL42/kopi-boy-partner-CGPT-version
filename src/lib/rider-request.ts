@@ -28,16 +28,26 @@ export function canRequestRiderAt(scheduledFor: string | null | undefined, now: 
   return !opensAt || now >= opensAt.getTime();
 }
 
+/** "5:30 pm" — Singapore time, whatever the device's zone. */
+function singaporeTime(date: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Singapore", hour: "numeric", minute: "2-digit", hour12: true })
+      .formatToParts(date)
+      .map((p) => [p.type, p.value])
+  );
+  return `${parts.hour}:${parts.minute} ${String(parts.dayPeriod).toLowerCase()}`;
+}
+
 /** "Rider can be requested from 5:30 pm" — Singapore time, whatever the device's zone. */
 export function riderRequestOpensLabel(scheduledFor: string | null | undefined): string {
   const opensAt = riderRequestOpensAt(scheduledFor);
-  if (!opensAt) return "";
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Singapore", hour: "numeric", minute: "2-digit", hour12: true })
-      .formatToParts(opensAt)
-      .map((p) => [p.type, p.value])
-  );
-  return `Rider can be requested from ${parts.hour}:${parts.minute} ${String(parts.dayPeriod).toLowerCase()}`;
+  return opensAt ? `Rider can be requested from ${singaporeTime(opensAt)}` : "";
+}
+
+/** "Rider from 5:30 pm" — short enough for a half-width button on a phone. */
+export function riderRequestOpensShortLabel(scheduledFor: string | null | undefined): string {
+  const opensAt = riderRequestOpensAt(scheduledFor);
+  return opensAt ? `Rider from ${singaporeTime(opensAt)}` : "";
 }
 
 export type RequestRiderResult = { ok: true } | { ok: false; error: string };

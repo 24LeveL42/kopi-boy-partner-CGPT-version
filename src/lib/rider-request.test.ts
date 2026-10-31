@@ -6,6 +6,7 @@ import {
   requestRiderAs,
   riderRequestOpensAt,
   riderRequestOpensLabel,
+  riderRequestOpensShortLabel,
 } from "./rider-request.ts";
 
 // 10:15 UTC = 6:15 pm Singapore, so the window opens at 5:30 pm.
@@ -48,6 +49,11 @@ describe("riderRequestOpensLabel", () => {
 
   it("is empty for an ASAP order", () => {
     assert.equal(riderRequestOpensLabel(null), "");
+    assert.equal(riderRequestOpensShortLabel(null), "");
+  });
+
+  it("has a short form for the half-width button", () => {
+    assert.equal(riderRequestOpensShortLabel(SCHEDULED), "Rider from 5:30 pm");
   });
 });
 
@@ -113,6 +119,12 @@ describe("requestRiderAs", () => {
       assert.deepEqual(await requestRiderAs(client, "kitchen-1", "order-1", Date.now()), { ok: true });
       assert.equal(inserts.length, 1);
     }
+  });
+
+  it("requests a rider before the cook starts cooking — the same single insert, no kitchen-stage check", async () => {
+    const { client, inserts } = fakeClient({ order: { scheduled_for: null, preparation_status: "not_started", payment_status: "paid" } as { scheduled_for?: string | null } });
+    assert.deepEqual(await requestRiderAs(client, "kitchen-1", "order-1", Date.now()), { ok: true });
+    assert.deepEqual(inserts, [{ table: "delivery_requests", row: { order_id: "order-1", kitchen_id: "kitchen-1" } }]);
   });
 
   it("passes the database's refusal through (e.g. the trigger, on its own clock)", async () => {
