@@ -10,7 +10,8 @@ import { PartnerMenu } from "./PartnerMenu";
 import { MenuItemAddons } from "./MenuItemAddons";
 import { FormField as Field } from "./FormField";
 import { useBackHandler, useCancelHandler } from "./AppChrome";
-import type { Kitchen, MenuItem, MerchantCategory, CuisineType, PaynowType } from "@/lib/types-kitchen";
+import type { Kitchen, KitchenPrivate, MenuItem, MerchantCategory, CuisineType, PaynowType } from "@/lib/types-kitchen";
+import { saveKitchenRow } from "@/lib/kitchen-private";
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
 import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen-location-actions";
@@ -116,6 +117,8 @@ export function KitchenSetupForm({
   userId,
   defaults,
   existingKitchen,
+  existingPrivate,
+  privateLoadFailed = false,
   existingItems,
   existingAddons = {},
   onCancel,
@@ -123,6 +126,13 @@ export function KitchenSetupForm({
   userId: string;
   defaults: KitchenDefaults;
   existingKitchen?: Kitchen | null;
+  /** PayNow + terms date, from get_my_kitchen_private() (src/lib/kitchen-private.ts). */
+  existingPrivate?: KitchenPrivate | null;
+  /**
+   * PayNow couldn't be loaded: the fields start empty and a save leaves the
+   * saved PayNow as it is unless the cook types new details.
+   */
+  privateLoadFailed?: boolean;
   existingItems?: MenuItem[];
   /**
    * The dishes' add-ons by dish id. null = they couldn't be loaded, and then
@@ -145,8 +155,9 @@ export function KitchenSetupForm({
   const [description, setDescription] = useState(existingKitchen?.description ?? defaults.description ?? "");
   const [heroImage, setHeroImage] = useState(existingKitchen?.hero_image ?? "");
   const [heroUploading, setHeroUploading] = useState(false);
-  const [paynowType, setPaynowType] = useState<PaynowType>(existingKitchen?.paynow_type ?? "mobile");
-  const [paynowValue, setPaynowValue] = useState(existingKitchen?.paynow_value ?? "");
+  const [paynowType, setPaynowType] = useState<PaynowType>(existingPrivate?.paynow_type ?? "mobile");
+  const [paynowValue, setPaynowValue] = useState(existingPrivate?.paynow_value ?? "");
+  const [paynowEdited, setPaynowEdited] = useState(false);
   // Address OneMap found for the last checked postal code, shown so the
   // cook can confirm it's their kitchen.
   const [foundAddress, setFoundAddress] = useState<{ postal: string; address: string } | null>(null);
@@ -154,7 +165,7 @@ export function KitchenSetupForm({
   // Once acknowledged it stays acknowledged (the DB keeps the first
   // timestamp — schema section 33), so the box only gates kitchens that
   // haven't ticked it yet, including ones set up before it existed.
-  const alreadyAcknowledged = !!existingKitchen?.acknowledged_terms_at;
+  const alreadyAcknowledged = !!existingPrivate?.acknowledged_terms_at;
   const [acknowledged, setAcknowledged] = useState(alreadyAcknowledged);
   const addonsAvailable = existingAddons !== null;
   const [items, setItems] = useState<DraftItem[]>(
@@ -437,16 +448,16 @@ export function KitchenSetupForm({
     }
     setFoundAddress({ postal, address: location.address });
 
-    const { error: kitchenError } = await supabase.from("kitchens").upsert({
-      id: userId,
+    // Insert the first time, update after (never upsert: see saveKitchenRow).
+    const { error: kitchenError } = await saveKitchenRow(supabase, userId, isEdit, {
       business_name: businessName.trim(),
       category,
       cuisine_type: cuisineType,
       is_halal: isHalal,
       description: description.trim() || null,
       hero_image: heroImage.trim() || null,
-      paynow_type: paynowType,
-      paynow_value: paynowValue.trim() || null,
+      // If PayNow didn't load, empty fields mean "unknown", not "remove it".
+      ...(privateLoadFailed && !paynowEdited ? {} : { paynow_type: paynowType, paynow_value: paynowValue.trim() || null }),
       // Any non-null value means "ticked" — the DB stamps its own now()
       // the first time and keeps that original timestamp afterwards.
       acknowledged_terms_at: new Date().toISOString(),
@@ -735,7 +746,10 @@ export function KitchenSetupForm({
             <Field label="PayNow method (customers pay you directly)">
               <select
                 value={paynowType}
-                onChange={(e) => setPaynowType(e.target.value as PaynowType)}
+                onChange={(e) => {
+                  setPaynowType(e.target.value as PaynowType);
+                  setPaynowEdited(true);
+                }}
                 className="kb-input"
               >
                 {PAYNOW_TYPES.map((p) => (
@@ -748,10 +762,18 @@ export function KitchenSetupForm({
             <Field label={paynowType === "mobile" ? "PayNow mobile number" : "PayNow UEN"}>
               <input
                 value={paynowValue}
-                onChange={(e) => setPaynowValue(e.target.value)}
+                onChange={(e) => {
+                  setPaynowValue(e.target.value);
+                  setPaynowEdited(true);
+                }}
                 className="kb-input"
               />
             </Field>
+            {privateLoadFailed && !paynowEdited && (
+              <p className="rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }} role="status">
+                We couldn&apos;t load your PayNow details. Saving keeps them as they are unless you enter new ones here.
+              </p>
+            )}
           </section>
 
           <section className="kb-card space-y-4 p-5">

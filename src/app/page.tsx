@@ -8,7 +8,6 @@ import { AdminMessagePanel } from "@/components/AdminMessagePanel";
 import { BLOCKED_SCREEN_COPY } from "@/lib/admin-messages";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
 import type { Profile, CookApplication, RiderApplication } from "@/lib/types-auth";
-import type { Kitchen } from "@/lib/types-kitchen";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -20,7 +19,7 @@ export default async function Home() {
     return <LoginForm />;
   }
 
-  const [{ data: profile }, { data: cookApp }, { data: riderApp }, { data: kitchen }] =
+  const [{ data: profile }, { data: cookApp }, { data: riderApp }, { data: kitchen, error: kitchenError }] =
     await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single<Profile>(),
       supabase
@@ -37,11 +36,13 @@ export default async function Home() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle<RiderApplication>(),
-      supabase.from("kitchens").select("*").eq("id", user.id).maybeSingle<Kitchen>(),
+      // Public columns only (never "*": kitchen privacy Phase 2). The name is
+      // for the cook's header; the row's existence decides setup vs shell.
+      supabase.from("kitchens").select("id, business_name").eq("id", user.id).maybeSingle<{ id: string; business_name: string }>(),
     ]);
 
   // All routing decisions live in resolvePartnerScreen (unit-checkable, no DB).
-  const screen = resolvePartnerScreen({ profile, cookApp, riderApp, kitchen });
+  const screen = resolvePartnerScreen({ profile, cookApp, riderApp, kitchen, kitchenError: Boolean(kitchenError) });
 
   switch (screen.kind) {
     case "blocked":
@@ -68,6 +69,15 @@ export default async function Home() {
           signOut
           title="Application not approved"
           message="Your application wasn't approved this time. Contact Kopi Boy support if you'd like to know more or reapply."
+        />
+      );
+    case "kitchen-load-error":
+      return (
+        <StatusScreen
+          tone="warning"
+          signOut
+          title="Couldn't load your kitchen"
+          message="Something went wrong loading your kitchen. Please refresh the page in a moment."
         />
       );
     case "kitchen-setup":

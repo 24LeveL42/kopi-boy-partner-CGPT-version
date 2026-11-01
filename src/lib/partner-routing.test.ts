@@ -68,3 +68,21 @@ describe("retired picker role", () => {
     );
   });
 });
+
+describe("kitchen load error (kitchen privacy Phase 2)", () => {
+  it("never sends a cook to Kitchen Setup when the kitchen couldn't be loaded", () => {
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("cook", true), cookApp, kitchenError: true }), { kind: "kitchen-load-error" });
+    // Approved cook whose role hasn't caught up yet: same rule.
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("customer", true), cookApp, kitchenError: true }), { kind: "kitchen-load-error" });
+  });
+
+  it("still shows the shell when the kitchen loaded, and setup when there truly is none", () => {
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("cook", true), cookApp, kitchen: { id: "u-1" } }), { kind: "partner-shell", view: "cook" });
+    assert.equal(resolvePartnerScreen({ ...none, profile: profile("cook", true), cookApp }).kind, "kitchen-setup");
+  });
+
+  it("doesn't affect riders or blocked partners", () => {
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("rider", true), kitchenError: true }), { kind: "partner-shell", view: "rider" });
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("cook", false), cookApp, kitchenError: true }), { kind: "blocked" });
+  });
+});

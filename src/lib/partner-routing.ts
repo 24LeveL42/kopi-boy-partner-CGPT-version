@@ -1,5 +1,5 @@
 import type { Profile, CookApplication, RiderApplication } from "./types-auth";
-import type { Kitchen, MerchantCategory } from "./types-kitchen";
+import type { MerchantCategory } from "./types-kitchen";
 import { categoryForBusinessType } from "./kitchen-profile.ts";
 
 /**
@@ -11,7 +11,14 @@ export interface PartnerRoutingInput {
   profile: Profile | null;
   cookApp: CookApplication | null;
   riderApp: RiderApplication | null;
-  kitchen: Kitchen | null;
+  /** The cook's kitchens row (public columns only), or null when there isn't one. */
+  kitchen: { id: string } | null;
+  /**
+   * The kitchen couldn't be loaded (as opposed to "there isn't one"). Then a
+   * cook is never sent to Kitchen Setup: saving it would overwrite a kitchen
+   * that may well exist.
+   */
+  kitchenError?: boolean;
 }
 
 /** What first-time Kitchen Setup is pre-filled with, taken from the cook application. */
@@ -31,6 +38,7 @@ export type PartnerScreen =
   | { kind: "application-pending" }
   | { kind: "application-rejected" }
   | { kind: "kitchen-setup"; defaults: KitchenDefaults }
+  | { kind: "kitchen-load-error" }
   | { kind: "partner-shell"; view: "cook" | "rider" };
 
 function kitchenSetupFor(app: CookApplication): PartnerScreen {
@@ -60,7 +68,12 @@ export function resolvePartnerScreen({
   cookApp,
   riderApp,
   kitchen,
+  kitchenError = false,
 }: PartnerRoutingInput): PartnerScreen {
+  // "Saved kitchen → shell, none → setup", unless the kitchen didn't load.
+  const cookScreen = (app: CookApplication): PartnerScreen =>
+    kitchen ? { kind: "partner-shell", view: "cook" } : kitchenError ? { kind: "kitchen-load-error" } : kitchenSetupFor(app);
+
   // The retired picker role has no screen of its own. A blocked one stays
   // blocked; an active one is treated as not a partner yet, so they can
   // apply as a cook or rider like anyone else.
@@ -75,7 +88,7 @@ export function resolvePartnerScreen({
     // Cook: a saved kitchen means setup is done; otherwise setup needs the
     // cook application it was seeded from.
     if (kitchen) return { kind: "partner-shell", view: "cook" };
-    if (cookApp) return kitchenSetupFor(cookApp);
+    if (cookApp) return cookScreen(cookApp);
     // Role says cook but there's no cook application — stale state, so
     // don't trust the role; fall through to the application check.
   }
@@ -104,7 +117,7 @@ export function resolvePartnerScreen({
       // Same "already set up?" check as the cook branch above — without it,
       // an approved cook whose role hasn't been promoted yet gets sent back
       // to Kitchen Setup forever, even after saving a kitchen.
-      return kitchen ? { kind: "partner-shell", view: "cook" } : kitchenSetupFor(cookApp);
+      return cookScreen(cookApp);
     }
     if (latest.kind === "rider") return { kind: "partner-shell", view: "rider" };
   }

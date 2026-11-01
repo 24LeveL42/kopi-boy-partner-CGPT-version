@@ -27,13 +27,20 @@ export interface Kitchen {
   description: string | null;
   hero_image: string | null;
   is_live: boolean;
-  paynow_type: PaynowType | null;
-  paynow_value: string | null;
   /** Set only by the database from the approved cook application (schema section 27) — never written by the app. */
   business_uen: string | null;
-  /** Rounded to 3 decimals (~110 m) by the database (schema section 29); exact values are in kitchen_addresses. */
-  latitude: number | null;
-  longitude: number | null;
+}
+
+/**
+ * The owner-only part of a kitchens row the Partner app uses (kitchen privacy
+ * Phase 2): read through get_my_kitchen_private(), never by selecting the
+ * columns as a signed-in user (src/lib/kitchen-private.ts). kitchens.latitude
+ * and longitude are private too, but the cook's form reads its exact location
+ * from kitchen_addresses instead.
+ */
+export interface KitchenPrivate {
+  paynow_type: PaynowType | null;
+  paynow_value: string | null;
   /** Stamped by the database (schema section 33) the first time the cook ticks the partner terms; null on kitchens that predate it. */
   acknowledged_terms_at: string | null;
 }

@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { KitchenSetupForm } from "@/components/KitchenSetupForm";
+import { StatusScreen } from "@/components/StatusScreen";
 import type { Profile } from "@/lib/types-auth";
 import type { Kitchen, MenuItem } from "@/lib/types-kitchen";
 import type { KitchenLocation } from "@/lib/kitchen-profile";
 import { addonsByItem, type GroupRow, type SavedGroup } from "@/lib/menu-addons";
+import { KITCHEN_COLUMNS, loadMyKitchenPrivate } from "@/lib/kitchen-private";
 
 export default async function KitchenPage() {
   const supabase = await createClient();
@@ -23,8 +25,11 @@ export default async function KitchenPage() {
   // Blocked cooks get the blocked screen on "/" instead of their kitchen.
   if (!profile || profile.role !== "cook" || !profile.is_active) redirect("/");
 
-  const [{ data: kitchen }, { data: address }, { data: items }] = await Promise.all([
-    supabase.from("kitchens").select("*").eq("id", user.id).maybeSingle<Kitchen>(),
+  // Public columns explicitly (never "*"), PayNow + terms date through
+  // get_my_kitchen_private() — kitchen privacy Phase 2.
+  const [{ data: kitchen, error: kitchenError }, privateLoad, { data: address }, { data: items }] = await Promise.all([
+    supabase.from("kitchens").select(KITCHEN_COLUMNS).eq("id", user.id).maybeSingle<Kitchen>(),
+    loadMyKitchenPrivate(supabase, user.id),
     supabase
       .from("kitchen_addresses")
       .select("business_address, postal_code, latitude, longitude")
@@ -37,6 +42,18 @@ export default async function KitchenPage() {
       .order("created_at", { ascending: true })
       .returns<MenuItem[]>(),
   ]);
+
+  // Not "no kitchen": the form would then save a new one over whatever exists.
+  if (kitchenError) {
+    console.error("Kitchen page: couldn't load the kitchen", kitchenError);
+    return (
+      <StatusScreen
+        tone="warning"
+        title="Couldn't load your kitchen"
+        message="Something went wrong loading your kitchen. Please refresh the page in a moment."
+      />
+    );
+  }
 
   // Add-ons for the dishes, by dish id. null = they couldn't be read, and
   // then the form doesn't offer them at all: saving add-ons replaces a dish's
@@ -66,6 +83,8 @@ export default async function KitchenPage() {
         description: kitchen?.description ?? "",
       }}
       existingKitchen={kitchen}
+      existingPrivate={privateLoad.ok ? privateLoad.data : null}
+      privateLoadFailed={!privateLoad.ok}
       existingItems={items ?? []}
       existingAddons={addons}
     />
