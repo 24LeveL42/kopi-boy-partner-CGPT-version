@@ -1,17 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { usePendingAction } from "@/lib/use-pending-action";
 import { useBackHandler } from "./AppChrome";
 import { Logo } from "./Logo";
 import { PendingLabel } from "./Pending";
 
-type Step = "choice" | "enter-phone" | "enter-code";
+// Google is the only sign-in method (phone/SMS codes were removed).
+type Step = "choice" | "google";
 type Intent = "signup" | "signin";
-
-const SG_PREFIX = "+65";
 
 export function LoginForm({
   initialError = null,
@@ -20,43 +18,25 @@ export function LoginForm({
 }) {
   const [step, setStep] = useState<Step>("choice");
   const [intent, setIntent] = useState<Intent>("signin");
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(initialError);
 
-  const { busy, isRunning, run, startTransition } = usePendingAction();
+  const { busy, isRunning, run } = usePendingAction();
 
   const supabase = createClient();
-  const router = useRouter();
-
-  const fullPhone = `${SG_PREFIX}${phone.replace(/\D/g, "")}`;
 
   useBackHandler(
-    step === "enter-code"
-      ? () => setStep("enter-phone")
-      : step === "enter-phone"
-        ? () => {
-            setStep("choice");
-            setError(null);
-          }
-        : null,
+    step === "google"
+      ? () => {
+          setStep("choice");
+          setError(null);
+        }
+      : null,
   );
 
   function chooseIntent(next: Intent) {
     setError(null);
-
-    if (step === "enter-code") {
-      if (next === intent) return;
-
-      setCode("");
-      setStep("enter-phone");
-    }
-
     setIntent(next);
-
-    if (step === "choice") {
-      setStep("enter-phone");
-    }
+    setStep("google");
   }
 
   function handleGoogleSignIn() {
@@ -76,63 +56,6 @@ export function LoginForm({
       }
 
       await new Promise<never>(() => {});
-    });
-  }
-
-  function handleSendCode(e: React.FormEvent) {
-    e.preventDefault();
-
-    run("send", async () => {
-      setError(null);
-
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: fullPhone,
-        options: {
-          shouldCreateUser: intent === "signup",
-        },
-      });
-
-      if (error) {
-        if (
-          intent === "signin" &&
-          (error.code === "otp_disabled" ||
-            /signups? not allowed/i.test(error.message))
-        ) {
-          setError(
-            "We couldn't find an account for that number. Check the number, or tap Sign up if you're new.",
-          );
-        } else {
-          setError(error.message);
-        }
-
-        return;
-      }
-
-      setStep("enter-code");
-    });
-  }
-
-  function handleVerifyCode(e: React.FormEvent) {
-    e.preventDefault();
-
-    run("verify", async () => {
-      setError(null);
-
-      const { error } = await supabase.auth.verifyOtp({
-        phone: fullPhone,
-        token: code,
-        type: "sms",
-      });
-
-      if (error) {
-        setError(error.message);
-        return;
-      }
-
-      startTransition(() => {
-        router.push("/");
-        router.refresh();
-      });
     });
   }
 
@@ -320,7 +243,7 @@ export function LoginForm({
                 >
                   {intent === "signup"
                     ? "New to Kopi Boy? Join the partner network."
-                    : "Sign in with Google or your mobile number."}
+                    : "Sign in with Google."}
                 </p>
               </div>
 
@@ -345,157 +268,6 @@ export function LoginForm({
                     : "Sign in with Google"}
                 </PendingLabel>
               </button>
-
-              {/* Divider */}
-              <div className="my-5 flex items-center gap-3">
-                <span
-                  className="h-px flex-1"
-                  style={{ background: "#EAE7F0" }}
-                />
-
-                <span
-                  className="text-[11px] font-semibold uppercase tracking-wider"
-                  style={{ color: "var(--kb-ink-soft)" }}
-                >
-                  or mobile
-                </span>
-
-                <span
-                  className="h-px flex-1"
-                  style={{ background: "#EAE7F0" }}
-                />
-              </div>
-
-              {/* Phone */}
-              {step === "enter-phone" ? (
-                <form onSubmit={handleSendCode} className="space-y-3">
-                  <div
-                    className="flex items-center gap-2 rounded-2xl border bg-[#FAFAFC] px-4 py-3.5"
-                    style={{
-                      borderColor: "rgba(124,58,237,0.12)",
-                      color: "var(--kb-ink)",
-                    }}
-                  >
-                    <span
-                      className="text-[15px] font-semibold"
-                      style={{ color: "var(--kb-ink-soft)" }}
-                    >
-                      {SG_PREFIX}
-                    </span>
-
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      required
-                      value={phone}
-                      onChange={(e) =>
-                        setPhone(
-                          e.target.value.replace(/\D/g, "").slice(0, 8),
-                        )
-                      }
-                      placeholder="9123 4567"
-                      className="w-full bg-transparent text-[15px] outline-none"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={busy || phone.length < 8}
-                    className="w-full rounded-2xl py-3.5 text-[15px] font-bold text-white shadow-lg transition-all disabled:opacity-60"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, var(--kb-purple) 0%, #8b5cf6 48%, var(--kb-green) 100%)",
-                    }}
-                  >
-                    <PendingLabel
-                      pending={isRunning("send")}
-                      pendingText="Sending code…"
-                    >
-                      {intent === "signup"
-                        ? "Send sign-up code"
-                        : "Send sign-in code"}
-                    </PendingLabel>
-                  </button>
-
-                  <p
-                    className="pt-1 text-center text-sm"
-                    style={{ color: "var(--kb-ink-soft)" }}
-                  >
-                    {intent === "signin"
-                      ? "New to Kopi Boy? "
-                      : "Already have an account? "}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        chooseIntent(
-                          intent === "signin" ? "signup" : "signin",
-                        )
-                      }
-                      className="font-bold underline"
-                      style={{ color: "var(--kb-purple)" }}
-                    >
-                      {intent === "signin" ? "Sign up" : "Sign in"}
-                    </button>
-                  </p>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyCode} className="space-y-3">
-                  <p
-                    className="text-sm leading-6"
-                    style={{ color: "var(--kb-ink-soft)" }}
-                  >
-                    Enter the 6-digit code we sent to{" "}
-                    <span
-                      className="font-semibold"
-                      style={{ color: "var(--kb-ink)" }}
-                    >
-                      {fullPhone}
-                    </span>
-                    .
-                  </p>
-
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    required
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    placeholder="123456"
-                    className="w-full rounded-2xl border bg-[#FAFAFC] px-4 py-4 text-center text-lg tracking-[0.3em] outline-none"
-                    style={{
-                      borderColor: "rgba(124,58,237,0.12)",
-                      color: "var(--kb-ink)",
-                    }}
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={busy}
-                    className="w-full rounded-2xl py-3.5 text-[15px] font-bold text-white shadow-lg disabled:opacity-60"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, var(--kb-purple) 0%, #8b5cf6 48%, var(--kb-green) 100%)",
-                    }}
-                  >
-                    <PendingLabel
-                      pending={isRunning("verify")}
-                      pendingText="Verifying…"
-                    >
-                      Verify & continue
-                    </PendingLabel>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setStep("enter-phone")}
-                    className="w-full py-2 text-center text-sm font-medium"
-                    style={{ color: "var(--kb-ink-soft)" }}
-                  >
-                    ← Use a different number
-                  </button>
-                </form>
-              )}
             </>
           )}
 
