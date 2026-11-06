@@ -23,6 +23,11 @@
 --     (reads kitchen_addresses as SECURITY DEFINER), and the kitchens
 --     triggers (sections 27, 29, 33): none of them read as the caller.
 --
+-- kitchens.region (docs/supabase-regions.sql) is the 16th public column once
+-- that file has run. Part B grants it back by itself whenever the column
+-- exists (B3), so re-running Part B never takes it away; on a database
+-- without it, Part B grants the 15 as before.
+--
 -- What changes for app code: a signed-in select("*") on kitchens fails with
 -- "permission denied" (it names columns the caller can't read), and so does
 -- an upsert that sets a private column (ON CONFLICT DO UPDATE ... EXCLUDED
@@ -138,8 +143,9 @@ begin
 end;
 $$;
 
--- B2. Exactly the public columns, the same 15 as Phase 1 gave anon. RLS still
--- decides which rows (own kitchen, live kitchens, admins).
+-- B2. Exactly the public columns, the same 15 as Phase 1 gave anon (16 with
+-- region, see B3). RLS still decides which rows (own kitchen, live kitchens,
+-- admins).
 grant select (
   id,
   business_name,
@@ -158,15 +164,28 @@ grant select (
   live_since
 ) on public.kitchens to authenticated;
 
+-- B3. kitchens.region (docs/supabase-regions.sql) is the 16th public column.
+-- B1 just revoked it with the rest, so it is granted back here, and only when
+-- it exists: this file still runs on a database that doesn't have it yet, and
+-- a re-run never takes it away.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'kitchens' and column_name = 'region') then
+    grant select (region) on public.kitchens to authenticated;
+  end if;
+end;
+$$;
+
 commit;
 
 
 -- ============================================================================
 -- CHECKS AFTERWARDS (read only). Paste one at a time into the SQL editor.
 --
--- 1. authenticated can SELECT exactly the 15 public columns (expect 15 rows,
---    none of paynow_type, paynow_value, latitude, longitude,
---    acknowledged_terms_at):
+-- 1. authenticated can SELECT exactly the public columns (expect 16 rows once
+--    supabase-regions.sql has run, 15 before; none of paynow_type,
+--    paynow_value, latitude, longitude, acknowledged_terms_at):
 -- select column_name from information_schema.column_privileges where table_schema = 'public' and table_name = 'kitchens' and grantee = 'authenticated' and privilege_type = 'SELECT' order by column_name;
 --
 -- 2. INSERT and UPDATE are still there for authenticated (expect INSERT and UPDATE):
@@ -183,5 +202,6 @@ commit;
 --   select paynow_value from public.kitchens limit 1;    -- permission denied
 --   select * from public.kitchens limit 1;               -- permission denied
 --   select id, business_name, is_live from public.kitchens limit 1;  -- works
+--   select id, region from public.kitchens limit 1;      -- works (once supabase-regions.sql has run)
 --   reset role;
 -- ============================================================================

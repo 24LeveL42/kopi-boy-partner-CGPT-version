@@ -1701,3 +1701,15 @@ where p.role = 'customer'
 update public.profiles p set role = 'picker'
 where p.role = 'customer'
   and exists (select 1 from public.picker_applications a where a.user_id = p.id and a.status = 'approved');
+
+-- ----------------------------------------------------------------------------
+-- 36. REGIONS (North / South / East / West) — see docs/supabase-regions.sql
+-- Pointer only: nothing to run here. kitchens.region, the regions and
+-- postal_sector_regions tables, rider_regions, set_my_ride_regions() and
+-- admin_set_rider_regions() are all defined in docs/supabase-regions.sql.
+-- kitchens.region is derived from kitchen_addresses.postal_code by its own
+-- trigger, before_kitchen_region, separate from section 29, so re-running
+-- section 29 does not affect it. Section 29's AFTER trigger on
+-- kitchen_addresses still makes it recompute when a cook's postal code
+-- changes.
+-- ----------------------------------------------------------------------------

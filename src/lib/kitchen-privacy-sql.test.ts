@@ -10,6 +10,9 @@ import { PGlite } from "@electric-sql/pglite";
  * (section 33), and stand-ins for Phase 1's get_order_paynow,
  * kitchen_public_locations and hero_candidates (Customer repo,
  * docs/supabase-kitchen-privacy.sql) with the same security settings.
+ *
+ * Run twice over: without kitchens.region (15 public columns, as before
+ * docs/supabase-regions.sql) and with it (16: Part B's guarded B3 grants it).
  */
 
 // Normalised to \n so the section markers below match on a Windows checkout.
@@ -54,7 +57,7 @@ const CUSTOMER = id(500);
 const STRANGER = id(501);
 const ACCEPTED = id(601);
 
-const schema = (withNeighbourhood = true) => `
+const schema = (withNeighbourhood = true, withRegion = false) => `
 create role anon;
 create role authenticated;
 create schema auth;
@@ -87,7 +90,7 @@ create table public.kitchens (
   is_halal boolean not null default false,
   acknowledged_terms_at timestamptz,
   is_blocked boolean not null default false,
-  live_since timestamptz
+  live_since timestamptz${withRegion ? ", region text" : ""}
 );
 alter table public.kitchens enable row level security;
 ${between(SCHEMA_SQL, "grant select, insert, update on public.kitchens to authenticated;", "-- ----------------------------------------------------------------------------\n-- 7. MENU ITEMS")}
@@ -120,7 +123,7 @@ create view public.hero_candidates with (security_invoker = false) as
   from public.kitchens k where k.is_live and not k.is_blocked and k.live_since is not null;
 grant select on public.hero_candidates to anon, authenticated;
 revoke select on public.kitchens from anon;
-grant select (${PUBLIC_COLUMNS.filter((c) => withNeighbourhood || c !== "neighbourhood").join(", ")}) on public.kitchens to anon;
+grant select (${PUBLIC_COLUMNS.filter((c) => withNeighbourhood || c !== "neighbourhood").concat(withRegion ? ["region"] : []).join(", ")}) on public.kitchens to anon;
 
 -- Seed as the table owner, before the terms trigger (it would restamp the dates).
 insert into public.profiles (id, role) values
@@ -128,15 +131,16 @@ insert into public.profiles (id, role) values
 insert into public.kitchens (id, business_name, is_live, paynow_type, paynow_value, latitude, longitude, live_since, acknowledged_terms_at) values
   ('${LIVE_COOK}', 'Aunty May', true, 'mobile', '91234567', 1.345678, 103.876543, now() - interval '2 days', '2026-01-01T00:00:00Z'),
   ('${OFFLINE_COOK}', 'Closed Kitchen', false, 'uen', '201912345K', 1.300001, 103.800001, null, null);
+${withRegion ? `update public.kitchens set region = case id when '${LIVE_COOK}' then 'east' else 'north' end;` : ""}
 insert into public.menu_items (kitchen_id, name) values ('${LIVE_COOK}', 'Laksa'), ('${OFFLINE_COOK}', 'Hidden');
 insert into public.orders (id, customer_id, kitchen_id, order_status) values ('${ACCEPTED}', '${CUSTOMER}', '${LIVE_COOK}', 'accepted');
 
 ${TERMS_TRIGGER}
 `;
 
-async function freshDb(withNeighbourhood = true): Promise<PGlite> {
+async function freshDb(withNeighbourhood = true, withRegion = false): Promise<PGlite> {
   const db = new PGlite();
-  await db.exec(schema(withNeighbourhood));
+  await db.exec(schema(withNeighbourhood, withRegion));
   return db;
 }
 
@@ -407,6 +411,63 @@ async function as_inTx<T>(db: PGlite, uid: string, fn: () => Promise<T>): Promis
   await db.exec("reset role");
   return out;
 }
+
+describe("kitchen privacy Phase 2 SQL — with kitchens.region (after supabase-regions.sql)", () => {
+  let db: PGlite;
+  before(async () => {
+    db = await freshDb(true, true);
+    await db.exec(PART_A);
+    await db.exec(PART_B);
+  });
+  after(() => db.close());
+
+  const SIGNED_IN = [["owner", LIVE_COOK], ["admin", ADMIN], ["customer", CUSTOMER]] as const;
+
+  it("grants authenticated exactly the 15 public columns plus region (16)", async () => {
+    const cols = await rows<{ column_name: string }>(db, CHECKS[0]);
+    assert.equal(cols.length, 16);
+    assert.deepEqual(cols.map((r) => r.column_name).sort(), [...PUBLIC_COLUMNS, "region"].sort());
+    const privileges = await rows<{ privilege_type: string }>(db, CHECKS[1]);
+    assert.deepEqual(privileges.map((r) => r.privilege_type), ["INSERT", "UPDATE"]);
+  });
+
+  it("region is readable by the owner, an admin and a customer", async () => {
+    for (const [who, uid] of SIGNED_IN) {
+      const r = await as(db, "authenticated", uid, () => rows(db, "select id, region from public.kitchens where id = $1", [LIVE_COOK]));
+      assert.deepEqual(r, [{ id: LIVE_COOK, region: "east" }], who);
+    }
+    const own = await as(db, "authenticated", OFFLINE_COOK, () => rows(db, "select region from public.kitchens where id = $1", [OFFLINE_COOK]));
+    assert.deepEqual(own, [{ region: "north" }]);
+  });
+
+  it("the 5 private columns are still permission denied for the owner, an admin and a customer", async () => {
+    for (const [who, uid] of SIGNED_IN) {
+      for (const column of PRIVATE_COLUMNS) {
+        const error = await as(db, "authenticated", uid, () => attempt(db, `select ${column} from public.kitchens`));
+        assert.match(error, /permission denied/, `${who} ${column}`);
+      }
+    }
+  });
+
+  it("select * still fails", async () => {
+    for (const [who, uid] of SIGNED_IN) {
+      const error = await as(db, "authenticated", uid, () => attempt(db, "select * from public.kitchens"));
+      assert.match(error, /permission denied/, who);
+    }
+  });
+
+  it("a re-run of Part B keeps region readable (and the 5 columns hidden)", async () => {
+    await db.exec(PART_B);
+    await db.exec(PART_B);
+    const cols = await rows<{ column_name: string }>(db, CHECKS[0]);
+    assert.equal(cols.length, 16);
+    assert.ok(cols.some((c) => c.column_name === "region"));
+    const r = await as(db, "authenticated", CUSTOMER, () => rows(db, "select region from public.kitchens where id = $1", [LIVE_COOK]));
+    assert.deepEqual(r, [{ region: "east" }]);
+    const error = await as(db, "authenticated", CUSTOMER, () => attempt(db, "select paynow_value from public.kitchens"));
+    assert.match(error, /permission denied/);
+  });
+});
 
 describe("kitchen privacy Phase 2 SQL — Part B on a database missing a column", () => {
   it("stops before changing anything", async () => {
