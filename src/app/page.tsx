@@ -5,6 +5,8 @@ import { StatusScreen } from "@/components/StatusScreen";
 import { PartnerShell } from "@/components/PartnerShell";
 import { KitchenSetupGate } from "@/components/KitchenSetupGate";
 import { AdminMessagePanel } from "@/components/AdminMessagePanel";
+import { RideRegionsPrompt } from "@/components/RideRegionsPrompt";
+import { loadMyRideRegions, shouldPromptForRideRegions } from "@/lib/ride-regions";
 import { BLOCKED_SCREEN_COPY } from "@/lib/admin-messages";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
 import type { Profile, CookApplication, RiderApplication } from "@/lib/types-auth";
@@ -44,6 +46,13 @@ export default async function Home() {
   // All routing decisions live in resolvePartnerScreen (unit-checkable, no DB).
   const screen = resolvePartnerScreen({ profile, cookApp, riderApp, kitchen, kitchenError: Boolean(kitchenError) });
 
+  // Riders (and rider applicants waiting for HQ) with no regions yet get a
+  // gentle prompt. Never blocking: a failed read just shows no prompt.
+  const isRiderView = screen.kind === "partner-shell" && screen.view === "rider";
+  const isPendingRider = screen.kind === "application-pending" && riderApp?.status === "pending";
+  const promptRideRegions =
+    (isRiderView || isPendingRider) && shouldPromptForRideRegions(await loadMyRideRegions(supabase, user.id));
+
   switch (screen.kind) {
     case "blocked":
       // Replaces the whole cook / rider area. No block reason is
@@ -60,7 +69,9 @@ export default async function Home() {
           signOut
           title="Application under review"
           message="Thanks for applying! Kopi Boy HQ is reviewing your application — we'll let you know once it's approved."
-        />
+        >
+          {promptRideRegions ? <RideRegionsPrompt /> : null}
+        </StatusScreen>
       );
     case "application-rejected":
       return (
@@ -89,6 +100,7 @@ export default async function Home() {
           defaultView={screen.view}
           partnerName={profile?.full_name ?? null}
           businessName={screen.view === "cook" ? kitchen?.business_name ?? null : null}
+          promptRideRegions={promptRideRegions}
           riderProfile={
             screen.view === "rider"
               ? { fullName: profile?.full_name ?? null, phone: profile?.phone ?? null, photoUrl: profile?.photo_url ?? null }

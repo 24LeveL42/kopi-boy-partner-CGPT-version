@@ -14,6 +14,7 @@ import type { Kitchen, KitchenPrivate, MenuItem, MerchantCategory, CuisineType, 
 import { saveKitchenRow } from "@/lib/kitchen-private";
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
+import { regionLabel, type RegionCode } from "@/lib/ride-regions";
 import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen-location-actions";
 import {
   assignInsertedIds,
@@ -121,6 +122,7 @@ export function KitchenSetupForm({
   privateLoadFailed = false,
   existingItems,
   existingAddons = {},
+  region = null,
   onCancel,
 }: {
   userId: string;
@@ -139,6 +141,11 @@ export function KitchenSetupForm({
    * add-ons are neither shown nor saved (saving replaces a dish's whole list).
    */
   existingAddons?: Record<string, SavedGroup[]> | null;
+  /**
+   * kitchens.region, derived by the database from the saved postal code.
+   * Shown read-only; never sent on save. null = not known (not shown).
+   */
+  region?: RegionCode | null;
   /** Where Cancel goes. Defaults to Home; first-time setup (which *is* Home) passes its own. */
   onCancel?: () => void;
 }) {
@@ -713,6 +720,14 @@ export function KitchenSetupForm({
               <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
                 Your kitchen&apos;s location on the map comes from this postal code.
               </p>
+              {regionLabel(region) && (
+                <p className="mt-2 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                  Your region:{" "}
+                  <span className="font-semibold" style={{ color: "var(--kb-ink)" }}>{regionLabel(region)}</span>
+                  {" "}· set automatically from your saved postal code
+                  {postalCode.trim() !== defaults.postal_code ? " (it updates after you save)" : ""}
+                </p>
+              )}
             </div>
             <Field label="Description (optional)">
               <textarea

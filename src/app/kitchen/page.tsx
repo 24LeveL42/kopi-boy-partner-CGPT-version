@@ -7,6 +7,7 @@ import type { Kitchen, MenuItem } from "@/lib/types-kitchen";
 import type { KitchenLocation } from "@/lib/kitchen-profile";
 import { addonsByItem, type GroupRow, type SavedGroup } from "@/lib/menu-addons";
 import { KITCHEN_COLUMNS, loadMyKitchenPrivate } from "@/lib/kitchen-private";
+import { loadKitchenRegion } from "@/lib/ride-regions";
 
 export default async function KitchenPage() {
   const supabase = await createClient();
@@ -27,7 +28,9 @@ export default async function KitchenPage() {
 
   // Public columns explicitly (never "*"), PayNow + terms date through
   // get_my_kitchen_private() — kitchen privacy Phase 2.
-  const [{ data: kitchen, error: kitchenError }, privateLoad, { data: address }, { data: items }] = await Promise.all([
+  // kitchens.region is a read of its own (loadKitchenRegion): if it fails,
+  // only the "Your region" line goes, never the page.
+  const [{ data: kitchen, error: kitchenError }, privateLoad, { data: address }, { data: items }, region] = await Promise.all([
     supabase.from("kitchens").select(KITCHEN_COLUMNS).eq("id", user.id).maybeSingle<Kitchen>(),
     loadMyKitchenPrivate(supabase, user.id),
     supabase
@@ -41,6 +44,7 @@ export default async function KitchenPage() {
       .eq("kitchen_id", user.id)
       .order("created_at", { ascending: true })
       .returns<MenuItem[]>(),
+    loadKitchenRegion(supabase, user.id),
   ]);
 
   // Not "no kitchen": the form would then save a new one over whatever exists.
@@ -87,6 +91,7 @@ export default async function KitchenPage() {
       privateLoadFailed={!privateLoad.ok}
       existingItems={items ?? []}
       existingAddons={addons}
+      region={region}
     />
   );
 }

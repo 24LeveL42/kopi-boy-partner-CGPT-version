@@ -4,6 +4,7 @@ import { BottomNav } from "./BottomNav";
 import { CookOrdersPanel } from "./CookOrdersPanel";
 import { RiderDeliveriesPanel } from "./RiderDeliveriesPanel";
 import { ProfileSummaryCard, type ProfileSummary } from "./ProfileSummaryCard";
+import { RideRegionsPrompt } from "./RideRegionsPrompt";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -16,12 +17,15 @@ export function PartnerShell({
   riderProfile,
   partnerName,
   businessName,
+  promptRideRegions = false,
 }: {
   userId: string;
   defaultView: "cook" | "rider";
   riderProfile?: ProfileSummary;
   partnerName?: string | null;
   businessName?: string | null;
+  /** A rider with no regions saved yet: show the gentle prompt (never blocks deliveries). */
+  promptRideRegions?: boolean;
 }) {
   const isCook = defaultView === "cook";
 
@@ -66,6 +70,8 @@ export function PartnerShell({
             ) : null}
           </div>
         </section>
+
+        {!isCook && promptRideRegions && <RideRegionsPrompt />}
 
         {isCook ? (
           <>

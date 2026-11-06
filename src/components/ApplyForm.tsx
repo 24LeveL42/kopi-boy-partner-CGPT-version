@@ -18,10 +18,12 @@ import {
   privacyCopyFor,
   withoutConsentFields,
 } from "@/lib/privacy-consent";
+import { saveMyRideRegions, validateRideRegions, type RegionCode } from "@/lib/ride-regions";
 import { useBackHandler } from "./AppChrome";
 import { Logo } from "./Logo";
 import { PendingLabel } from "./Pending";
 import { PhotoPicker } from "./PhotoPicker";
+import { RideRegionsPicker } from "./RideRegionsPicker";
 import { SignOutButton } from "./SignOutButton";
 
 export function ApplyForm({ userId }: { userId: string }) {
@@ -51,14 +53,40 @@ export function ApplyForm({ userId }: { userId: string }) {
   // Rider fields
   const [vehicleType, setVehicleType] = useState("Motorcycle");
   const [licensePlate, setLicensePlate] = useState("");
+  // Where the rider usually rides (regions only — never an address). Saved
+  // through set_my_ride_regions after the application goes in.
+  const [rideRegions, setRideRegions] = useState<RegionCode[]>([]);
+  // The application went in but the regions didn't save: the form isn't
+  // shown again (that would send a second application), only a retry.
+  const [regionsSaveError, setRegionsSaveError] = useState<string | null>(null);
 
   // Privacy Policy acknowledgement (required) and the rider's GPS consent
   // (optional). Both start unticked, and again whenever a role is picked.
   const [acknowledged, setAcknowledged] = useState(false);
   const [gpsConsent, setGpsConsent] = useState(false);
 
-  // Global Back steps from a role's form to the role choice.
-  useBackHandler(roleChoice ? () => setRoleChoice(null) : null);
+  // Global Back steps from a role's form to the role choice (not once the
+  // application has been sent).
+  useBackHandler(roleChoice && !regionsSaveError ? () => setRoleChoice(null) : null);
+
+  function goHome() {
+    startTransition(() => {
+      router.push("/");
+      router.refresh();
+    });
+  }
+
+  function retryRideRegions() {
+    run("regions", async () => {
+      const problem = await saveMyRideRegions(supabase, rideRegions);
+      if (problem) {
+        setRegionsSaveError(problem);
+        return;
+      }
+      setRegionsSaveError(null);
+      goHome();
+    });
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,6 +111,12 @@ export function ApplyForm({ userId }: { userId: string }) {
         setError(uenProblem);
         return;
       }
+    }
+
+    const checkedRegions = roleChoice === "rider" ? validateRideRegions(rideRegions) : null;
+    if (checkedRegions && !checkedRegions.ok) {
+      setError(checkedRegions.message);
+      return;
     }
 
     // The database checks this again and stamps the time itself
@@ -148,13 +182,52 @@ export function ApplyForm({ userId }: { userId: string }) {
           setError(error.message);
           return;
         }
+        // Needs the application on file, so only after it went in.
+        const regionsProblem = await saveMyRideRegions(supabase, rideRegions);
+        if (regionsProblem) {
+          setRegionsSaveError(regionsProblem);
+          return;
+        }
       }
 
-      startTransition(() => {
-        router.push("/");
-        router.refresh();
-      });
+      goHome();
     });
+  }
+
+  if (regionsSaveError) {
+    return (
+      <main className="kb-page min-h-page">
+        <div className="relative mx-auto flex min-h-page w-full max-w-md flex-col justify-center px-5 py-8">
+          <div className="kb-card-pop space-y-4 p-5">
+            <div>
+              <span className="kb-pill mb-2">Application sent</span>
+              <h1 className="font-display text-2xl font-bold tracking-tight" style={{ color: "var(--kb-ink)" }}>
+                Your regions didn&apos;t save
+              </h1>
+              <p className="mt-1.5 text-sm" style={{ color: "var(--kb-ink-soft)" }}>
+                Your rider application was sent to HQ. Only the regions you ride in still need saving.
+              </p>
+            </div>
+            <RideRegionsPicker value={rideRegions} onChange={setRideRegions} disabled={loading} hint="You can also set these later in Profile." />
+            <p role="alert" className="kb-alert-error rounded-2xl px-4 py-3 text-sm">
+              {regionsSaveError}
+            </p>
+            <button type="button" onClick={retryRideRegions} disabled={loading} className="kb-btn-primary w-full py-3.5 text-[15px]">
+              <PendingLabel pending={loading} pendingText="Saving…">Try saving regions again</PendingLabel>
+            </button>
+            <button
+              type="button"
+              onClick={goHome}
+              disabled={loading}
+              className="w-full rounded-2xl border bg-white py-3 text-sm font-bold"
+              style={{ color: "var(--kb-purple)", borderColor: "var(--kb-line, rgba(124,58,237,0.12))" }}
+            >
+              Continue, I&apos;ll set them later
+            </button>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   if (!roleChoice) {
@@ -181,6 +254,7 @@ export function ApplyForm({ userId }: { userId: string }) {
                 onClick={() => {
                   setAcknowledged(false);
                   setGpsConsent(false);
+                  setRideRegions([]);
                   setRoleChoice(option.role);
                 }}
                 className="group w-full rounded-2xl border px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
@@ -313,6 +387,7 @@ export function ApplyForm({ userId }: { userId: string }) {
               <Field label="License plate (if applicable)">
                 <input value={licensePlate} onChange={(e) => setLicensePlate(e.target.value)} className="kb-input" />
               </Field>
+              <RideRegionsPicker value={rideRegions} onChange={setRideRegions} disabled={loading} />
               <Field label="Your photo (optional — helps HQ verify you)">
                 <PhotoPicker
                   userId={userId}

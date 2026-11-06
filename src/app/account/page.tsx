@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/SignOutButton";
 import { PartnerProfileForm } from "@/components/PartnerProfileForm";
+import { RideRegionsForm } from "@/components/RideRegionsForm";
+import { loadMyRideRegions } from "@/lib/ride-regions";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
 import type { Profile, CookApplication, RiderApplication } from "@/lib/types-auth";
 
@@ -28,6 +30,9 @@ export default async function AccountPage() {
   // to the cook branch, which this page doesn't care about.
   const screen = resolvePartnerScreen({ profile, cookApp, riderApp, kitchen: null });
   const isRider = screen.kind === "partner-shell" && screen.view === "rider";
+  // Riders, and rider applicants still waiting for HQ, choose where they ride.
+  const picksRegions = isRider || (screen.kind === "application-pending" && riderApp?.status === "pending");
+  const rideRegions = picksRegions ? await loadMyRideRegions(supabase, user.id) : null;
 
   return (
     <div className="kb-page min-h-page px-4 py-8 sm:px-6">
@@ -46,6 +51,7 @@ export default async function AccountPage() {
             photoUrl={profile.photo_url}
           />
         )}
+        {picksRegions && rideRegions && <RideRegionsForm initial={rideRegions.ok ? rideRegions.regions : null} />}
         <div className="kb-card p-5">
           <p className="kb-eyebrow">Signed in as</p>
           <p className="mt-1.5 break-all text-[15px] font-bold">{user.email ?? user.phone}</p>
