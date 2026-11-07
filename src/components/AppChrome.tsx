@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { LegalFooter } from "./LegalFooter";
 
 type BackHandler = () => void;
 
@@ -186,6 +187,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       <div key={homeKey} className="flex-1" style={{ paddingTop: "var(--app-bar-h)" }}>
         {children}
       </div>
+      <LegalFooter />
     </BackContext.Provider>
   );
 }

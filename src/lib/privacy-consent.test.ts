@@ -80,7 +80,7 @@ describe("wording", () => {
     assert.equal(GPS_CONSENT_COPY.note, "GPS sharing is optional. You may choose not to enable it.");
   });
 
-  it("has no Privacy Policy link until a real page exists", () => {
-    assert.equal(PRIVACY_POLICY_URL, null);
+  it("links the Privacy Policy to the Customer app's public page", () => {
+    assert.equal(PRIVACY_POLICY_URL, "https://kopi-boy.com/privacy");
   });
 });

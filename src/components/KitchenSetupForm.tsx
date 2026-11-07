@@ -14,6 +14,7 @@ import type { Kitchen, KitchenPrivate, MenuItem, MerchantCategory, CuisineType, 
 import { saveKitchenRow } from "@/lib/kitchen-private";
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
+import { NEW_TAB, PRIVACY_LINK_LABEL, PRIVACY_URL, TERMS_LINK_LABEL, TERMS_URL } from "@/lib/legal-links";
 import { regionLabel, type RegionCode } from "@/lib/ride-regions";
 import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen-location-actions";
 import {
@@ -891,6 +892,18 @@ export function KitchenSetupForm({
             />
             <span>{KITCHEN_TERMS}</span>
           </label>
+          {/* Outside the label so tapping a link never toggles the tick. */}
+          <p className="-mt-2 px-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+            Read Kopi Boy&apos;s{" "}
+            <a href={TERMS_URL} {...NEW_TAB} className="font-semibold underline" style={{ color: "var(--kb-purple)" }}>
+              {TERMS_LINK_LABEL}
+            </a>{" "}
+            and{" "}
+            <a href={PRIVACY_URL} {...NEW_TAB} className="font-semibold underline" style={{ color: "var(--kb-purple)" }}>
+              {PRIVACY_LINK_LABEL}
+            </a>
+            .
+          </p>
 
           <button
             type="submit"

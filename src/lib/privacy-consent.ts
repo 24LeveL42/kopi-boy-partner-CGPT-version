@@ -13,15 +13,15 @@
  */
 
 import type { PartnerRole } from "./types";
+import { PRIVACY_URL } from "./legal-links.ts";
 
 export const PRIVACY_POLICY_VERSION = "2026-10-v1";
 
 /**
- * Where the Privacy Policy lives. Leave null until the real page exists: the
- * "Read Privacy Policy" link is then left out rather than pointing nowhere
- * (same rule as the Customer app's legal-links.ts).
+ * Where the Privacy Policy lives: the Customer app's public page
+ * (src/lib/legal-links.ts). The "Read Privacy Policy" link opens it in a new tab.
  */
-export const PRIVACY_POLICY_URL: string | null = null;
+export const PRIVACY_POLICY_URL: string | null = PRIVACY_URL;
 
 export const PRIVACY_LINK_LABEL = "Read Privacy Policy";
 
