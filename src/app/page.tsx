@@ -6,6 +6,8 @@ import { PartnerShell } from "@/components/PartnerShell";
 import { KitchenSetupGate } from "@/components/KitchenSetupGate";
 import { AdminMessagePanel } from "@/components/AdminMessagePanel";
 import { RideRegionsPrompt } from "@/components/RideRegionsPrompt";
+import { ApprovalCelebration } from "@/components/ApprovalCelebration";
+import { approvalCelebrationFor } from "@/lib/approval-celebration";
 import { loadMyRideRegions, shouldPromptForRideRegions } from "@/lib/ride-regions";
 import { BLOCKED_SCREEN_COPY } from "@/lib/admin-messages";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
@@ -53,6 +55,17 @@ export default async function Home() {
   const promptRideRegions =
     (isRiderView || isPendingRider) && shouldPromptForRideRegions(await loadMyRideRegions(supabase, user.id));
 
+  // One-time "You're approved" confetti + card, for cooks and riders.
+  const celebration = approvalCelebrationFor(screen, profile);
+  const celebrationCard = celebration ? (
+    <ApprovalCelebration
+      userId={user.id}
+      fullName={profile?.full_name ?? null}
+      buttonLabel={celebration.buttonLabel}
+      href={celebration.href}
+    />
+  ) : null;
+
   switch (screen.kind) {
     case "blocked":
       // Replaces the whole cook / rider area. No block reason is
@@ -92,21 +105,29 @@ export default async function Home() {
         />
       );
     case "kitchen-setup":
-      return <KitchenSetupGate userId={user.id} defaults={screen.defaults} />;
+      return (
+        <>
+          <KitchenSetupGate userId={user.id} defaults={screen.defaults} />
+          {celebrationCard}
+        </>
+      );
     case "partner-shell":
       return (
-        <PartnerShell
-          userId={user.id}
-          defaultView={screen.view}
-          partnerName={profile?.full_name ?? null}
-          businessName={screen.view === "cook" ? kitchen?.business_name ?? null : null}
-          promptRideRegions={promptRideRegions}
-          riderProfile={
-            screen.view === "rider"
-              ? { fullName: profile?.full_name ?? null, phone: profile?.phone ?? null, photoUrl: profile?.photo_url ?? null }
-              : undefined
-          }
-        />
+        <>
+          <PartnerShell
+            userId={user.id}
+            defaultView={screen.view}
+            partnerName={profile?.full_name ?? null}
+            businessName={screen.view === "cook" ? kitchen?.business_name ?? null : null}
+            promptRideRegions={promptRideRegions}
+            riderProfile={
+              screen.view === "rider"
+                ? { fullName: profile?.full_name ?? null, phone: profile?.phone ?? null, photoUrl: profile?.photo_url ?? null }
+                : undefined
+            }
+          />
+          {celebrationCard}
+        </>
       );
     case "apply":
       return <ApplyForm userId={user.id} />;

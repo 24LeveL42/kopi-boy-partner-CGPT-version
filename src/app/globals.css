@@ -334,3 +334,10 @@ body {
 /* Drop-off pin (src/lib/riderIcon.ts dropoffIcon), shown with the line after pickup */
 .kb-dropoff { width: 20px; height: 26px; filter: drop-shadow(0 1px 2px rgba(34,22,56,.4)); }
 .kb-dropoff svg { display: block; }
+
+/* "You're approved" card (ApprovalCelebration). With reduce motion on, the
+   global rule above shortens these to nothing, so the card simply appears. */
+.kb-sheet-up { animation: kb-sheet-up 420ms cubic-bezier(.2,.9,.3,1.15) both; }
+.kb-fade-in { animation: kb-fade-in 300ms ease-out both; }
+@keyframes kb-sheet-up { from { transform: translateY(110%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes kb-fade-in { from { opacity: 0; } to { opacity: 1; } }

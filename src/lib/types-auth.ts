@@ -9,6 +9,9 @@ export interface Profile {
   phone: string | null;
   photo_url: string | null;
   is_active: boolean;
+  // One-time "You're approved" celebration seen
+  // (docs/supabase-approval-celebration.sql). Optional: missing until that SQL has run.
+  approval_celebrated?: boolean;
 }
 
 export interface CookApplication {
