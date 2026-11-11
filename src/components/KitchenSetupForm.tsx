@@ -17,6 +17,7 @@ import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kit
 import { NEW_TAB, PRIVACY_LINK_LABEL, PRIVACY_URL, TERMS_LINK_LABEL, TERMS_URL } from "@/lib/legal-links";
 import { regionLabel, type RegionCode } from "@/lib/ride-regions";
 import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen-location-actions";
+import { KITCHEN_WELCOME_BANNER } from "@/lib/kitchen-live";
 import {
   assignInsertedIds,
   dealsAffectedByRemoval,
@@ -151,6 +152,9 @@ export function KitchenSetupForm({
   onCancel?: () => void;
 }) {
   const isEdit = !!existingKitchen;
+  // Welcome banner while no kitchen has ever been saved. Dismissing only
+  // hides it on this visit; nothing is stored.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -614,6 +618,27 @@ export function KitchenSetupForm({
           <Logo size={36} />
           <span className="w-10" aria-hidden="true" /> {/* balances the menu button so the logo stays centred */}
         </div>
+        {!isEdit && !welcomeDismissed && (
+          <div
+            role="status"
+            className="mb-5 flex items-start gap-3 rounded-[22px] border p-4 text-left"
+            style={{ borderColor: "rgba(124,58,237,0.18)", background: "rgba(124,58,237,0.05)" }}
+          >
+            <span aria-hidden="true" className="text-lg leading-6">👋</span>
+            <p className="min-w-0 flex-1 text-sm leading-6" style={{ color: "var(--kb-ink)" }}>
+              {KITCHEN_WELCOME_BANNER}
+            </p>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => setWelcomeDismissed(true)}
+              className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg"
+              style={{ color: "var(--kb-ink-soft)" }}
+            >
+              ×
+            </button>
+          </div>
+        )}
         <div className="text-center">
           <span className="kb-pill mb-2">Kitchen partner</span>
         </div>

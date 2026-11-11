@@ -12,6 +12,9 @@ export interface Profile {
   // One-time "You're approved" celebration seen
   // (docs/supabase-approval-celebration.sql). Optional: missing until that SQL has run.
   approval_celebrated?: boolean;
+  // One-time "Your kitchen is live!" pop-up seen (docs/supabase-kitchen-live.sql).
+  // Optional: missing until that SQL has run.
+  kitchen_live_seen?: boolean;
 }
 
 export interface CookApplication {

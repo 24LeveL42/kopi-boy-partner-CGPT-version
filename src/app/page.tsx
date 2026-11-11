@@ -8,6 +8,8 @@ import { AdminMessagePanel } from "@/components/AdminMessagePanel";
 import { RideRegionsPrompt } from "@/components/RideRegionsPrompt";
 import { ApprovalCelebration } from "@/components/ApprovalCelebration";
 import { approvalCelebrationFor } from "@/lib/approval-celebration";
+import { KitchenLiveDialog } from "@/components/KitchenLiveDialog";
+import { shouldShowKitchenLive } from "@/lib/kitchen-live";
 import { loadMyRideRegions, shouldPromptForRideRegions } from "@/lib/ride-regions";
 import { BLOCKED_SCREEN_COPY } from "@/lib/admin-messages";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
@@ -41,8 +43,13 @@ export default async function Home() {
         .limit(1)
         .maybeSingle<RiderApplication>(),
       // Public columns only (never "*": kitchen privacy Phase 2). The name is
-      // for the cook's header; the row's existence decides setup vs shell.
-      supabase.from("kitchens").select("id, business_name").eq("id", user.id).maybeSingle<{ id: string; business_name: string }>(),
+      // for the cook's header; the row's existence decides setup vs shell;
+      // is_live / is_blocked decide the "Your kitchen is live!" pop-up.
+      supabase
+        .from("kitchens")
+        .select("id, business_name, is_live, is_blocked")
+        .eq("id", user.id)
+        .maybeSingle<{ id: string; business_name: string; is_live: boolean; is_blocked: boolean }>(),
     ]);
 
   // All routing decisions live in resolvePartnerScreen (unit-checkable, no DB).
@@ -65,6 +72,9 @@ export default async function Home() {
       href={celebration.href}
     />
   ) : null;
+
+  // One-time "Your kitchen is live!" pop-up after the first kitchen save.
+  const showKitchenLive = shouldShowKitchenLive({ screen, profile, kitchen, approvalCelebrationShowing: celebration !== null });
 
   switch (screen.kind) {
     case "blocked":
@@ -127,6 +137,7 @@ export default async function Home() {
             }
           />
           {celebrationCard}
+          {showKitchenLive ? <KitchenLiveDialog userId={user.id} /> : null}
         </>
       );
     case "apply":
