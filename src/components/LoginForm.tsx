@@ -85,6 +85,9 @@ export function LoginForm({
         provider: "google",
         options: {
           redirectTo: authCallbackUrl(window.location.origin, next),
+          // Always show Google's account chooser, so a shared phone or a
+          // second Google account isn't silently signed in as the last one.
+          queryParams: { prompt: "select_account" },
         },
       });
 

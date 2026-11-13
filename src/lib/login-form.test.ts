@@ -15,6 +15,12 @@ describe("LoginForm: Google is the only sign-in method", () => {
     assert.match(source, /"Sign up with Google"/);
   });
 
+  it("always shows Google's account chooser, and keeps redirectTo with next", () => {
+    const options = source.match(/signInWithOAuth\(\{[\s\S]*?options:\s*\{([\s\S]*?)\n\s*\},/)?.[1] ?? "";
+    assert.match(options, /queryParams:\s*\{\s*prompt:\s*"select_account"\s*\}/);
+    assert.match(options, /redirectTo:\s*authCallbackUrl\(window\.location\.origin, next\)/);
+  });
+
   it("has exactly one OAuth provider and one auth call", () => {
     assert.equal(source.match(/provider:/g)?.length, 1);
     assert.equal(source.match(/supabase\.auth\.\w+\(/g)?.length, 1);
