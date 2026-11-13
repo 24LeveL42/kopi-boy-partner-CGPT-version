@@ -9,6 +9,8 @@ import { OrderChat } from "@/components/OrderChat";
 import { PartnerRiderChat } from "@/components/PartnerRiderChat";
 import { PendingLabel } from "@/components/Pending";
 import { SkeletonCards } from "@/components/Skeleton";
+import { PanelLoadError } from "@/components/PanelLoadError";
+import { retryOnce, withTimeout } from "@/lib/load-timeout";
 import { ORDER_CHAT_PHOTO_TYPES, uploadOrderChatPhoto, validateOrderChatPhoto } from "@/lib/order-chat-photo";
 import { formatKitchenAddress, kitchenMapsUrl, publicKitchenArea, type KitchenLocation } from "@/lib/kitchen-profile";
 import { acceptDelivery, completeDelivery, markCollected } from "@/lib/rider-delivery-actions";
@@ -78,7 +80,8 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
   const proofInputRef = useRef<HTMLInputElement>(null);
 
   // `silent` = live refresh: update in place without flashing the loading state.
-  const load = useCallback(async (silent?: boolean) => {
+  // One attempt; throws when the deliveries can't be read (see `load` below).
+  const loadOnce = useCallback(async (silent?: boolean) => {
     if (silent !== true) setLoading(true);
     setError(null);
 
@@ -89,11 +92,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       .eq("status", "accepted")
       .maybeSingle<RawRow>();
 
-    if (mineError) {
-      setError(mineError.message);
-      setLoading(false);
-      return;
-    }
+    if (mineError) throw new Error(mineError.message);
 
     // Counts every delivery, including ones removed from the list below.
     const startOfDay = new Date();
@@ -147,11 +146,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
       .order("created_at", { ascending: true })
       .returns<RawRow[]>();
 
-    if (openError) {
-      setError(openError.message);
-      setLoading(false);
-      return;
-    }
+    if (openError) throw new Error(openError.message);
 
     // Open jobs only get the drop-off area, Express and the requested time —
     // the address, unit and notes arrive once the rider accepts.
@@ -160,6 +155,21 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
     setOpenRequests(rows.map((r) => toRow(r, details?.[r.id] ?? null)));
     setLoading(false);
   }, [supabase, riderId]);
+
+  // Every load gets a time limit and one automatic retry. Whatever happens,
+  // the skeleton ends: a load that still fails shows a message with Retry.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const load = useCallback(async (silent?: boolean) => {
+    try {
+      await retryOnce(() => withTimeout(() => loadOnce(silent)));
+      setLoadFailed(false);
+    } catch (e) {
+      console.error("RiderDeliveriesPanel: couldn't load", e);
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadOnce]);
 
   useEffect(() => {
     // Deferred so the initial setLoading(true) inside load() doesn't run
@@ -269,6 +279,7 @@ export function RiderDeliveriesPanel({ riderId }: { riderId: string }) {
 
   return (
     <div>
+      {loadFailed && <PanelLoadError onRetry={() => run("reload", () => load())} pending={isRunning("reload")} disabled={busy} />}
       {error && (
         <p className="mb-3 rounded-xl px-3 py-2 text-xs" style={{ background: "#FEF0F0", color: "#B42318" }}>
           {error}

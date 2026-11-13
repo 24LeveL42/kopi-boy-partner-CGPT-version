@@ -38,7 +38,7 @@ describe("approvalCelebrationFor", () => {
 
   it("never plays for applicants, rejected, blocked, the join screen or the kitchen error screen", () => {
     const others: PartnerScreen[] = [
-      { kind: "application-pending" },
+      { kind: "application-pending", as: "cook" },
       { kind: "application-rejected" },
       { kind: "blocked" },
       { kind: "apply" },
@@ -58,11 +58,18 @@ describe("approvalCelebrationFor", () => {
     }
   });
 
-  it("plays for an approved rider whose role hasn't been promoted yet (routed to the rider dashboard)", () => {
+  it("doesn't play for an approved rider whose role hasn't been promoted yet (they wait on 'Almost there')", () => {
     const p: Profile = { id: "u-1", role: "customer", full_name: "R", phone: null, photo_url: null, is_active: true, approval_celebrated: false };
     const riderApp = { id: "a-1", user_id: "u-1", status: "approved", created_at: "2026-01-01T00:00:00Z" } as RiderApplication;
     const screen = resolvePartnerScreen({ profile: p, cookApp: null, riderApp, kitchen: null });
-    assert.deepEqual(approvalCelebrationFor(screen, p), { buttonLabel: "Start delivering", href: null });
+    assert.deepEqual(screen, { kind: "approval-finishing", as: "rider" });
+    assert.equal(approvalCelebrationFor(screen, p), null);
+  });
+
+  it("never plays for HQ accounts or while approval is finishing", () => {
+    for (const screen of [{ kind: "staff-account" }, { kind: "approval-finishing", as: "cook" }] as PartnerScreen[]) {
+      assert.equal(approvalCelebrationFor(screen, notYet), null, screen.kind);
+    }
   });
 });
 

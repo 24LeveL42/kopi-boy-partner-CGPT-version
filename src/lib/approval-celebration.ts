@@ -1,8 +1,8 @@
 import type { Profile } from "./types-auth";
 import type { PartnerScreen } from "./partner-routing";
 
-/** Brand confetti: Kopi Boy purple and green, plus white and gold. */
-export const CELEBRATION_COLOURS = ["#7B3FE4", "#10B981", "#FFFFFF", "#F5B70A"];
+// Shared with /welcome (lighter bursts, see celebration-confetti.ts).
+export { CELEBRATION_COLOURS } from "./celebration-confetti.ts";
 
 /** What the card's one button says, and where it goes (null = just close the card). */
 export interface ApprovalCelebration {

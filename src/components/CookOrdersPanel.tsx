@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useLiveRefresh } from "@/lib/use-live-refresh";
 import { usePendingAction } from "@/lib/use-pending-action";
 import { PendingLabel } from "./Pending";
+import { PanelLoadError } from "./PanelLoadError";
+import { retryOnce, withTimeout } from "@/lib/load-timeout";
 import { SkeletonCards } from "./Skeleton";
 import type { OrderWithItems } from "@/lib/types-orders";
 import type { DeliveryRiderDetails } from "@/lib/types-delivery";
@@ -42,7 +44,8 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
   const [now, setNow] = useState(() => Date.now());
 
   // `silent` = live refresh: update in place without flashing the loading state.
-  const load = useCallback(async (silent?: boolean) => {
+  // One attempt; throws when the orders can't be read (see `load` below).
+  const loadOnce = useCallback(async (silent?: boolean) => {
     if (silent !== true) setLoading(true);
 
     // Every order the cook hasn't removed from their list (cook_hidden_at,
@@ -68,11 +71,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
       ({ data, error: loadError } = await query(hiddenFilter, withOptions));
     }
 
-    if (loadError) {
-      setError(loadError.message);
-      setLoading(false);
-      return;
-    }
+    if (loadError) throw new Error(loadError.message);
 
     // Finished (delivered and paid, cancelled, rejected) goes to "Past orders".
     const all = data ?? [];
@@ -99,6 +98,21 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
     setRiderDetails(nextDetails);
     setLoading(false);
   }, [supabase, kitchenId]);
+
+  // Every load gets a time limit and one automatic retry. Whatever happens,
+  // the skeleton ends: a load that still fails shows a message with Retry.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const load = useCallback(async (silent?: boolean) => {
+    try {
+      await retryOnce(() => withTimeout(() => loadOnce(silent)));
+      setLoadFailed(false);
+    } catch (e) {
+      console.error("CookOrdersPanel: couldn't load", e);
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadOnce]);
 
   useEffect(() => {
     // Deferred so the initial setLoading(true) inside load() doesn't run
@@ -237,6 +251,7 @@ export function CookOrdersPanel({ kitchenId }: { kitchenId: string }) {
 
   return (
     <div className="space-y-4">
+      {loadFailed && <PanelLoadError onRetry={() => run("reload", () => load())} pending={isRunning("reload")} disabled={busy} />}
       <div className="grid grid-cols-3 gap-2 sm:gap-3" aria-label="Current order summary">
         <Metric label="Needs attention" value={newOrders.length + awaitingPayment.length} tone="purple" />
         <Metric label="Preparing" value={paidOrders.filter((o) => o.preparation_status === "preparing").length} tone="teal" />

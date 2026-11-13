@@ -82,6 +82,8 @@ const VALID: string[] = [
   "/",
   "/orders",
   "/kitchen",
+  "/welcome",
+  "/login?next=/welcome",
   "/account",
   "/notifications",
   "/promotions",

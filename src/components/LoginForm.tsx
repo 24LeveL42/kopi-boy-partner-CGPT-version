@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePendingAction } from "@/lib/use-pending-action";
+import { authCallbackUrl } from "@/lib/auth-callback";
+import { isInAppBrowser } from "@/lib/in-app-browser";
+import { GOOGLE_SLOW_MESSAGE, GOOGLE_WAIT_MS, IN_APP_BROWSER_COPY } from "@/lib/onboarding-copy";
 import { useBackHandler } from "./AppChrome";
 import { Logo } from "./Logo";
 import { PendingLabel } from "./Pending";
@@ -11,18 +14,53 @@ import { PendingLabel } from "./Pending";
 type Step = "choice" | "google";
 type Intent = "signup" | "signin";
 
+// The user agent never changes, so there is nothing to subscribe to; the
+// server render (and hydration) assume a normal browser.
+const subscribeNever = () => () => {};
+
+/**
+ * Resolves when the Google redirect is clearly not happening: the page came
+ * back from the back/forward cache (Back from Google), or GOOGLE_WAIT_MS
+ * passed without leaving. A normal redirect unloads the page first.
+ */
+function waitForGoogleRedirect(): Promise<"returned" | "timeout"> {
+  return new Promise((resolve) => {
+    const done = (outcome: "returned" | "timeout") => {
+      clearTimeout(timer);
+      window.removeEventListener("pageshow", onShow);
+      resolve(outcome);
+    };
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) done("returned");
+    };
+    const timer = setTimeout(() => done("timeout"), GOOGLE_WAIT_MS);
+    window.addEventListener("pageshow", onShow);
+  });
+}
+
 export function LoginForm({
   initialError = null,
+  next = "/",
 }: {
   initialError?: string | null;
+  /** Where to land after signing in (safe relative path, e.g. "/welcome"). */
+  next?: string;
 }) {
   const [step, setStep] = useState<Step>("choice");
   const [intent, setIntent] = useState<Intent>("signin");
   const [error, setError] = useState<string | null>(initialError);
 
   const { busy, isRunning, run } = usePendingAction();
+  const inAppBrowser = useSyncExternalStore(subscribeNever, () => isInAppBrowser(navigator.userAgent), () => false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const supabase = createClient();
+
+  function copyLink() {
+    navigator.clipboard
+      .writeText(window.location.href)
+      .then(() => setCopyState("copied"), () => setCopyState("failed"));
+  }
 
   useBackHandler(
     step === "google"
@@ -46,7 +84,7 @@ export function LoginForm({
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: authCallbackUrl(window.location.origin, next),
         },
       });
 
@@ -55,7 +93,9 @@ export function LoginForm({
         return;
       }
 
-      await new Promise<never>(() => {});
+      // Stay busy while the browser leaves for Google, but never forever:
+      // Back from Google, or a redirect that never happens, frees the button.
+      if ((await waitForGoogleRedirect()) === "timeout") setError(GOOGLE_SLOW_MESSAGE);
     });
   }
 
@@ -110,6 +150,27 @@ export function LoginForm({
             borderColor: "rgba(124,58,237,0.10)",
           }}
         >
+          {inAppBrowser && (
+            <div
+              className="mb-4 rounded-2xl border px-4 py-3 text-left"
+              style={{ borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.08)" }}
+            >
+              <p className="text-sm font-bold" style={{ color: "var(--kb-ink)" }}>
+                {IN_APP_BROWSER_COPY.title}
+              </p>
+              <p className="mt-1 text-xs leading-5" style={{ color: "var(--kb-ink-soft)" }}>
+                {IN_APP_BROWSER_COPY.message}
+              </p>
+              <button type="button" onClick={copyLink} className="kb-btn-secondary mt-3 w-full py-2.5 text-sm">
+                {copyState === "copied"
+                  ? IN_APP_BROWSER_COPY.copied
+                  : copyState === "failed"
+                    ? IN_APP_BROWSER_COPY.copyFailed
+                    : IN_APP_BROWSER_COPY.copyLink}
+              </button>
+            </div>
+          )}
+
           {step === "choice" ? (
             <div className="space-y-3">
               <div className="mb-4">

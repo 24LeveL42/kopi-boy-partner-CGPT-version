@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { LoginForm } from "@/components/LoginForm";
 import { ApplyForm } from "@/components/ApplyForm";
 import { StatusScreen } from "@/components/StatusScreen";
+import { RetryScreen } from "@/components/RetryScreen";
+import { RefreshButton } from "@/components/RefreshButton";
 import { PartnerShell } from "@/components/PartnerShell";
 import { KitchenSetupGate } from "@/components/KitchenSetupGate";
 import { AdminMessagePanel } from "@/components/AdminMessagePanel";
@@ -13,54 +15,43 @@ import { shouldShowKitchenLive } from "@/lib/kitchen-live";
 import { loadMyRideRegions, shouldPromptForRideRegions } from "@/lib/ride-regions";
 import { BLOCKED_SCREEN_COPY } from "@/lib/admin-messages";
 import { resolvePartnerScreen } from "@/lib/partner-routing";
-import type { Profile, CookApplication, RiderApplication } from "@/lib/types-auth";
+import { loadPartnerState, loadUser } from "@/lib/partner-state";
+import { withTimeout } from "@/lib/load-timeout";
+import {
+  APPROVAL_FINISHING_COPY,
+  COOK_PRICING_LINE,
+  KITCHEN_LOAD_ERROR_COPY,
+  LOAD_ERROR_COPY,
+  PENDING_COPY,
+  STAFF_ACCOUNT_COPY,
+} from "@/lib/onboarding-copy";
 
 export default async function Home() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await loadUser(supabase);
+  if (!auth.ok) return <RetryScreen title={LOAD_ERROR_COPY.title} message={LOAD_ERROR_COPY.message} />;
 
+  const user = auth.user;
   if (!user) {
     return <LoginForm />;
   }
 
-  const [{ data: profile }, { data: cookApp }, { data: riderApp }, { data: kitchen, error: kitchenError }] =
-    await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).single<Profile>(),
-      supabase
-        .from("cook_applications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle<CookApplication>(),
-      supabase
-        .from("rider_applications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle<RiderApplication>(),
-      // Public columns only (never "*": kitchen privacy Phase 2). The name is
-      // for the cook's header; the row's existence decides setup vs shell;
-      // is_live / is_blocked decide the "Your kitchen is live!" pop-up.
-      supabase
-        .from("kitchens")
-        .select("id, business_name, is_live, is_blocked")
-        .eq("id", user.id)
-        .maybeSingle<{ id: string; business_name: string; is_live: boolean; is_blocked: boolean }>(),
-    ]);
+  // Profile, latest applications and kitchen, with a time limit and one
+  // automatic retry (src/lib/partner-state.ts).
+  const load = await loadPartnerState(supabase, user.id);
+  if (!load.ok) return <RetryScreen signOut title={LOAD_ERROR_COPY.title} message={LOAD_ERROR_COPY.message} />;
+  const { profile, riderApp, kitchen } = load.state;
 
   // All routing decisions live in resolvePartnerScreen (unit-checkable, no DB).
-  const screen = resolvePartnerScreen({ profile, cookApp, riderApp, kitchen, kitchenError: Boolean(kitchenError) });
+  const screen = resolvePartnerScreen(load.state);
 
   // Riders (and rider applicants waiting for HQ) with no regions yet get a
-  // gentle prompt. Never blocking: a failed read just shows no prompt.
+  // gentle prompt. Never blocking: a failed or slow read just shows no prompt.
   const isRiderView = screen.kind === "partner-shell" && screen.view === "rider";
   const isPendingRider = screen.kind === "application-pending" && riderApp?.status === "pending";
   const promptRideRegions =
-    (isRiderView || isPendingRider) && shouldPromptForRideRegions(await loadMyRideRegions(supabase, user.id));
+    (isRiderView || isPendingRider) &&
+    shouldPromptForRideRegions(await withTimeout(() => loadMyRideRegions(supabase, user.id)).catch(() => null));
 
   // One-time "You're approved" confetti + card, for cooks and riders.
   const celebration = approvalCelebrationFor(screen, profile);
@@ -77,6 +68,8 @@ export default async function Home() {
   const showKitchenLive = shouldShowKitchenLive({ screen, profile, kitchen, approvalCelebrationShowing: celebration !== null });
 
   switch (screen.kind) {
+    case "staff-account":
+      return <StatusScreen tone="neutral" signOut title={STAFF_ACCOUNT_COPY.title} message={STAFF_ACCOUNT_COPY.message} />;
     case "blocked":
       // Replaces the whole cook / rider area. No block reason is
       // stored, so none is shown — the partner asks HQ through the box below.
@@ -87,13 +80,32 @@ export default async function Home() {
       );
     case "application-pending":
       return (
-        <StatusScreen
-          tone="warning"
-          signOut
-          title="Application under review"
-          message="Thanks for applying! Kopi Boy HQ is reviewing your application — we'll let you know once it's approved."
-        >
-          {promptRideRegions ? <RideRegionsPrompt /> : null}
+        <StatusScreen tone="neutral" signOut title={PENDING_COPY.title} message={PENDING_COPY.message}>
+          <div className="space-y-4 text-left">
+            <div className="rounded-2xl px-4 py-3" style={{ background: "#F5F3FA" }}>
+              <p className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-purple)" }}>
+                {PENDING_COPY.stepsTitle}
+              </p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm" style={{ color: "var(--kb-ink)" }}>
+                {PENDING_COPY.steps[screen.as].map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </div>
+            {screen.as === "cook" && (
+              <p className="rounded-2xl px-4 py-2.5 text-center text-sm font-semibold" style={{ background: "var(--kb-mint)", color: "var(--kb-green-deep)" }}>
+                {COOK_PRICING_LINE}
+              </p>
+            )}
+            {promptRideRegions ? <RideRegionsPrompt /> : null}
+            <RefreshButton label={PENDING_COPY.checkStatus} pendingText={PENDING_COPY.checking} />
+          </div>
+        </StatusScreen>
+      );
+    case "approval-finishing":
+      return (
+        <StatusScreen tone="neutral" signOut title={APPROVAL_FINISHING_COPY.title} message={APPROVAL_FINISHING_COPY.message}>
+          <RefreshButton label={APPROVAL_FINISHING_COPY.checkAgain} pendingText={APPROVAL_FINISHING_COPY.checking} />
         </StatusScreen>
       );
     case "application-rejected":
@@ -106,14 +118,7 @@ export default async function Home() {
         />
       );
     case "kitchen-load-error":
-      return (
-        <StatusScreen
-          tone="warning"
-          signOut
-          title="Couldn't load your kitchen"
-          message="Something went wrong loading your kitchen. Please refresh the page in a moment."
-        />
-      );
+      return <RetryScreen signOut title={KITCHEN_LOAD_ERROR_COPY.title} message={KITCHEN_LOAD_ERROR_COPY.message} />;
     case "kitchen-setup":
       return (
         <>

@@ -35,11 +35,20 @@ export interface KitchenDefaults {
 export type PartnerScreen =
   | { kind: "blocked" }
   | { kind: "apply" }
-  | { kind: "application-pending" }
+  /** HQ (admin) accounts never run a kitchen or ride: a screen of their own, no apply form. */
+  | { kind: "staff-account" }
+  | { kind: "application-pending"; as: "cook" | "rider" }
   | { kind: "application-rejected" }
   | { kind: "kitchen-setup"; defaults: KitchenDefaults }
   | { kind: "kitchen-load-error" }
-  | { kind: "partner-shell"; view: "cook" | "rider" };
+  | { kind: "partner-shell"; view: "cook" | "rider" }
+  /**
+   * The application is approved but profiles.role hasn't been switched to
+   * cook / rider yet. The database only lets a cook save a kitchen and a
+   * rider take deliveries (RLS checks user_has_role), so sending them to
+   * Kitchen Setup or the rider dashboard now would only end in a refused save.
+   */
+  | { kind: "approval-finishing"; as: "cook" | "rider" };
 
 function kitchenSetupFor(app: CookApplication): PartnerScreen {
   return {
@@ -74,6 +83,10 @@ export function resolvePartnerScreen({
   const cookScreen = (app: CookApplication): PartnerScreen =>
     kitchen ? { kind: "partner-shell", view: "cook" } : kitchenError ? { kind: "kitchen-load-error" } : kitchenSetupFor(app);
 
+  // HQ accounts first: an admin who applied (or was approved) must never
+  // land in the partner flow, and is never offered the apply form.
+  if (profile?.role === "admin") return { kind: "staff-account" };
+
   // The retired picker role has no screen of its own. A blocked one stays
   // blocked; an active one is treated as not a partner yet, so they can
   // apply as a cook or rider like anyone else.
@@ -106,21 +119,13 @@ export function resolvePartnerScreen({
   // No application of any kind: always the join/apply screen.
   if (!latest) return { kind: "apply" };
 
-  if (latest.status === "pending") return { kind: "application-pending" };
+  if (latest.status === "pending") return { kind: "application-pending", as: latest.kind };
   if (latest.status === "rejected") return { kind: "application-rejected" };
 
-  // Approved, but profile.role hasn't caught up yet (e.g. HQ approved the
-  // application row without also promoting the profile) — route straight
-  // into the real partner flow instead of back through the sign-up form.
-  if (latest.status === "approved") {
-    if (latest.kind === "cook" && cookApp) {
-      // Same "already set up?" check as the cook branch above — without it,
-      // an approved cook whose role hasn't been promoted yet gets sent back
-      // to Kitchen Setup forever, even after saving a kitchen.
-      return cookScreen(cookApp);
-    }
-    if (latest.kind === "rider") return { kind: "partner-shell", view: "rider" };
-  }
+  // Approved, but profile.role hasn't caught up yet (HQ approved the
+  // application row without also promoting the profile). The database would
+  // refuse this account's kitchen save / delivery accept, so wait here.
+  if (latest.status === "approved") return { kind: "approval-finishing", as: latest.kind };
 
   return { kind: "apply" };
 }

@@ -9,7 +9,8 @@ const source = readFileSync(new URL("../components/LoginForm.tsx", import.meta.u
 describe("LoginForm: Google is the only sign-in method", () => {
   it("signs in with Google OAuth through /auth/callback", () => {
     assert.match(source, /signInWithOAuth\(\{\s*provider:\s*"google"/);
-    assert.match(source, /redirectTo:\s*`\$\{window\.location\.origin\}\/auth\/callback`/);
+    // /auth/callback, carrying ?next= (e.g. /welcome) — see auth-callback.ts.
+    assert.match(source, /redirectTo:\s*authCallbackUrl\(window\.location\.origin, next\)/);
     assert.match(source, /"Sign in with Google"/);
     assert.match(source, /"Sign up with Google"/);
   });
@@ -52,5 +53,19 @@ describe("LoginForm: Google is the only sign-in method", () => {
   it("only has the choice and Google steps", () => {
     assert.match(source, /type Step = "choice" \| "google";/);
     assert.ok(!/enter-phone|enter-code/.test(source));
+  });
+});
+
+describe("LoginForm: never stuck on 'Redirecting…'", () => {
+  it("doesn't wait forever for Google: Back (pageshow) or a time limit frees the button", () => {
+    assert.ok(!source.includes("new Promise<never>(() => {})"), "a promise that never settles");
+    assert.match(source, /addEventListener\("pageshow"/);
+    assert.match(source, /GOOGLE_WAIT_MS/);
+    assert.match(source, /GOOGLE_SLOW_MESSAGE/);
+  });
+
+  it("shows the open-in-browser hint inside Facebook / Instagram", () => {
+    assert.match(source, /isInAppBrowser\(navigator\.userAgent\)/);
+    assert.match(source, /IN_APP_BROWSER_COPY\.title/);
   });
 });

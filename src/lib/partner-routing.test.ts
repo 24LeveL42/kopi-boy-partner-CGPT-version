@@ -58,13 +58,14 @@ describe("retired picker role", () => {
   });
 
   it("lets an old picker account apply as a cook or rider like anyone else", () => {
+    // Approved, role not switched to rider yet: wait on "Almost there".
     assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("picker", true), riderApp }), {
-      kind: "partner-shell",
-      view: "rider",
+      kind: "approval-finishing",
+      as: "rider",
     });
     assert.deepEqual(
       resolvePartnerScreen({ ...none, profile: profile("picker", true), riderApp: { ...riderApp, status: "pending" } }),
-      { kind: "application-pending" }
+      { kind: "application-pending", as: "rider" }
     );
   });
 });
@@ -72,8 +73,8 @@ describe("retired picker role", () => {
 describe("kitchen load error (kitchen privacy Phase 2)", () => {
   it("never sends a cook to Kitchen Setup when the kitchen couldn't be loaded", () => {
     assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("cook", true), cookApp, kitchenError: true }), { kind: "kitchen-load-error" });
-    // Approved cook whose role hasn't caught up yet: same rule.
-    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("customer", true), cookApp, kitchenError: true }), { kind: "kitchen-load-error" });
+    // Approved cook whose role hasn't caught up yet: "Almost there", never setup.
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("customer", true), cookApp, kitchenError: true }), { kind: "approval-finishing", as: "cook" });
   });
 
   it("still shows the shell when the kitchen loaded, and setup when there truly is none", () => {
@@ -84,5 +85,59 @@ describe("kitchen load error (kitchen privacy Phase 2)", () => {
   it("doesn't affect riders or blocked partners", () => {
     assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("rider", true), kitchenError: true }), { kind: "partner-shell", view: "rider" });
     assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("cook", false), cookApp, kitchenError: true }), { kind: "blocked" });
+  });
+});
+
+describe("HQ (admin) accounts", () => {
+  const admin = profile("admin", true);
+  const pendingCook = { ...cookApp, status: "pending" } as CookApplication;
+  const rejectedCook = { ...cookApp, status: "rejected" } as CookApplication;
+
+  it("always get the HQ account screen, never apply, setup or a dashboard", () => {
+    const cases = [
+      { ...none, profile: admin },
+      { ...none, profile: admin, cookApp: pendingCook },
+      { ...none, profile: admin, cookApp },
+      { ...none, profile: admin, cookApp: rejectedCook },
+      { ...none, profile: admin, cookApp, kitchen },
+      { ...none, profile: admin, riderApp },
+      { ...none, profile: admin, cookApp, kitchenError: true },
+      { ...none, profile: profile("admin", false), cookApp },
+    ];
+    for (const input of cases) assert.deepEqual(resolvePartnerScreen(input), { kind: "staff-account" });
+  });
+});
+
+describe("approved but role not promoted yet", () => {
+  it("waits on 'Almost there' (the database refuses a non-cook's kitchen save, a non-rider's deliveries)", () => {
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("customer", true), cookApp }), { kind: "approval-finishing", as: "cook" });
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("customer", true), cookApp, kitchen }), { kind: "approval-finishing", as: "cook" });
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("customer", true), riderApp }), { kind: "approval-finishing", as: "rider" });
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: null, cookApp }), { kind: "approval-finishing", as: "cook" });
+  });
+
+  it("a promoted cook still goes to Kitchen Setup, then the dashboard", () => {
+    assert.equal(resolvePartnerScreen({ ...none, profile: profile("cook", true), cookApp }).kind, "kitchen-setup");
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("cook", true), cookApp, kitchen }), { kind: "partner-shell", view: "cook" });
+  });
+});
+
+describe("pending and rejected applications", () => {
+  it("pending says which kind, by the latest application", () => {
+    const pendingCook = { ...cookApp, status: "pending", created_at: "2026-03-01T00:00:00Z" } as CookApplication;
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("customer", true), cookApp: pendingCook }), { kind: "application-pending", as: "cook" });
+    assert.deepEqual(
+      resolvePartnerScreen({ ...none, profile: profile("customer", true), riderApp: { ...riderApp, status: "pending" } }),
+      { kind: "application-pending", as: "rider" }
+    );
+    // Latest wins: a newer pending cook application over an older approved rider one.
+    assert.deepEqual(resolvePartnerScreen({ ...none, profile: profile("customer", true), cookApp: pendingCook, riderApp }), { kind: "application-pending", as: "cook" });
+  });
+
+  it("rejected goes to the rejected screen", () => {
+    assert.deepEqual(
+      resolvePartnerScreen({ ...none, profile: profile("customer", true), cookApp: { ...cookApp, status: "rejected" } as CookApplication }),
+      { kind: "application-rejected" }
+    );
   });
 });

@@ -3,14 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { CELEBRATION_COLOURS, celebrationGreeting } from "@/lib/approval-celebration";
-
-/** How long the confetti plays before the card slides up. */
-const CONFETTI_MS = 2500;
+import { celebrationGreeting } from "@/lib/approval-celebration";
+import { CONFETTI_MS } from "@/lib/celebration-confetti";
+import { useCelebrationConfetti } from "@/lib/use-celebration-confetti";
 
 /**
  * The one-time "You're approved" celebration for a newly approved cook or rider:
- * confetti from both bottom corners, three firework bursts in the middle,
+ * light confetti from both bottom corners and two small firework bursts,
  * then a card that slides up. With "reduce motion" on, no confetti, just the
  * card. profiles.approval_celebrated is set when the card appears, so a
  * refresh or Back never replays it.
@@ -36,45 +35,13 @@ export function ApprovalCelebration({
   const [closed, setClosed] = useState(false);
   const marked = useRef(false);
 
-  // Confetti, then the card.
+  // Confetti (shared, light: see celebration-confetti.ts), then the card.
+  useCelebrationConfetti(true);
   useEffect(() => {
     // Reduce motion on: no confetti, the card straight away.
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    let cancelled = false;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    let reset: (() => void) | null = null;
-
-    // Loaded only here, so normal page loads never pay for it.
-    if (!reduceMotion) import("canvas-confetti")
-      .then(({ default: confetti }) => {
-        if (cancelled) return;
-        reset = confetti.reset;
-        const base = { colors: CELEBRATION_COLOURS, disableForReducedMotion: true, zIndex: 60 };
-
-        const corners = () => {
-          confetti({ ...base, particleCount: 70, angle: 60, spread: 55, startVelocity: 65, origin: { x: 0, y: 1 } });
-          confetti({ ...base, particleCount: 70, angle: 120, spread: 55, startVelocity: 65, origin: { x: 1, y: 1 } });
-        };
-        const firework = (x: number, y: number) =>
-          confetti({ ...base, particleCount: 80, spread: 360, startVelocity: 28, ticks: 80, gravity: 0.8, scalar: 0.9, origin: { x, y } });
-
-        corners();
-        timers.push(setTimeout(corners, 250));
-        timers.push(setTimeout(() => firework(0.5, 0.35), 800));
-        timers.push(setTimeout(() => firework(0.3, 0.3), 1400));
-        timers.push(setTimeout(() => firework(0.7, 0.32), 2000));
-      })
-      .catch((e) => console.error("Approval celebration: couldn't load confetti", e));
-
-    // The card comes up on time even if the confetti failed to load.
-    timers.push(setTimeout(() => !cancelled && setShowCard(true), reduceMotion ? 0 : CONFETTI_MS));
-
-    return () => {
-      cancelled = true;
-      timers.forEach(clearTimeout);
-      reset?.();
-    };
+    const timer = setTimeout(() => setShowCard(true), reduceMotion ? 0 : CONFETTI_MS);
+    return () => clearTimeout(timer);
   }, []);
 
   // Played once: record it as soon as the card is up.

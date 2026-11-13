@@ -55,7 +55,7 @@ describe("shouldShowKitchenLive", () => {
       { kind: "partner-shell", view: "rider" },
       { kind: "kitchen-setup", defaults: { business_name: "K", category: "home-cook", business_address: "", postal_code: "", latitude: null, longitude: null, description: "" } },
       { kind: "blocked" },
-      { kind: "application-pending" },
+      { kind: "application-pending", as: "cook" },
       { kind: "kitchen-load-error" },
     ];
     for (const screen of others) assert.equal(shouldShowKitchenLive({ ...base, screen }), false, screen.kind);
