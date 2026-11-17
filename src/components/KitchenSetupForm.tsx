@@ -167,8 +167,8 @@ export function KitchenSetupForm({
   const [description, setDescription] = useState(existingKitchen?.description ?? defaults.description ?? "");
   const [heroImage, setHeroImage] = useState(existingKitchen?.hero_image ?? "");
   const [heroUploading, setHeroUploading] = useState(false);
-  const [paynowType, setPaynowType] = useState<PaynowType>(existingPrivate?.paynow_type ?? "mobile");
-  const [paynowValue, setPaynowValue] = useState(existingPrivate?.paynow_value ?? "");
+  const [paynowType, setPaynowType] = useState<PaynowType>(existingPrivate?.paynow_type ?? defaults.paynow_type ?? "mobile");
+  const [paynowValue, setPaynowValue] = useState(existingPrivate?.paynow_value ?? defaults.paynow_value ?? "");
   const [paynowEdited, setPaynowEdited] = useState(false);
   // Address OneMap found for the last checked postal code, shown so the
   // cook can confirm it's their kitchen.

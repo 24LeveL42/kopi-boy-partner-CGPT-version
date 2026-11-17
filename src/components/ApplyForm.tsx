@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { usePendingAction } from "@/lib/use-pending-action";
 import { PartnerRole } from "@/lib/types";
 import { businessUenProblem, normalizeBusinessUen, requiresBusinessUen } from "@/lib/business-uen";
+import { isMissingPaynowMobileColumn, paynowApplicationFields, paynowProblem } from "@/lib/paynow-details";
+import {
+  createBrowserTracker,
+  isCookFormField,
+  type CookFormField,
+  type RegistrationTracker,
+  type ValidationCode,
+} from "@/lib/registration-tracking";
 import { MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
 import {
   GPS_CONSENT_COPY,
@@ -42,9 +50,29 @@ export function ApplyForm({ userId }: { userId: string }) {
   const [businessType, setBusinessType] = useState("Home Cook");
   const [businessAddress, setBusinessAddress] = useState("");
   const [postalCode, setPostalCode] = useState("");
-  const [description, setDescription] = useState("");
+  // "Tell customers about your food" is no longer asked here: cooks write it
+  // in Kitchen Setup. PayNow: a mobile number and/or a UEN (at least one;
+  // the UEN wins if both). See src/lib/paynow-details.ts.
+  const [paynowMobile, setPaynowMobile] = useState("");
   const [paynowUen, setPaynowUen] = useState("");
   const [businessUen, setBusinessUen] = useState("");
+
+  // Anonymous sign-up funnel tracking (cook path only). Never blocks or
+  // slows the form: see src/lib/registration-tracking.ts.
+  const trackerRef = useRef<RegistrationTracker | null>(null);
+  useEffect(() => {
+    const { tracker, dispose } = createBrowserTracker();
+    trackerRef.current = tracker;
+    tracker.track({ event: "page_view" });
+    return () => {
+      trackerRef.current = null;
+      dispose();
+    };
+  }, []);
+  const tracker = () => (roleChoice === "cook" ? trackerRef.current : null);
+  function trackError(field: CookFormField, code: ValidationCode) {
+    tracker()?.validationError(field, code);
+  }
 
   // Rider photo
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -93,22 +121,32 @@ export function ApplyForm({ userId }: { userId: string }) {
     setError(null);
 
     if (!fullName.trim() || !contactNumber.trim()) {
+      trackError(fullName.trim() ? "contact_number" : "full_name", "required");
       setError("Please fill in your full name and contact number.");
       return;
     }
 
     if (roleChoice === "cook") {
       if (!businessAddress.trim()) {
+        trackError("business_address", "required");
         setError("Please enter your business address.");
         return;
       }
       if (!isValidPostalCode(postalCode)) {
+        trackError("postal_code", "invalid_postal_code");
         setError("Postal code must be 6 digits (e.g. 310123).");
         return;
       }
       const uenProblem = businessUenProblem(businessType, businessUen);
       if (uenProblem) {
+        trackError("business_uen", businessUen.trim() ? "invalid_business_uen" : "required");
         setError(uenProblem);
+        return;
+      }
+      const paynow = paynowProblem(paynowMobile, paynowUen);
+      if (paynow) {
+        trackError(paynow.field, paynow.code);
+        setError(paynow.message);
         return;
       }
     }
@@ -123,16 +161,32 @@ export function ApplyForm({ userId }: { userId: string }) {
     // (docs/supabase-privacy-consent.sql).
     const consent = roleChoice ? consentFields(roleChoice, acknowledged, gpsConsent) : null;
     if (!consent) {
+      trackError("privacy_ack", "privacy_required");
       setError(PRIVACY_REQUIRED_MESSAGE);
       return;
     }
 
     // Before that SQL has run the consent columns don't exist, so the insert
     // is sent again without them rather than blocking every applicant.
+    // Likewise paynow_mobile before docs/supabase-paynow-mobile.sql: the
+    // application still goes in (the cook enters PayNow again in Kitchen
+    // Setup), it just can't pre-fill the mobile number.
     async function insertApplication(table: "cook_applications" | "rider_applications", row: Record<string, unknown>) {
-      const { error } = await supabase.from(table).insert(row);
-      if (!isMissingConsentColumns(error)) return error;
-      return (await supabase.from(table).insert(withoutConsentFields(row))).error;
+      let attempt = row;
+      for (let i = 0; i < 3; i++) {
+        const { error } = await supabase.from(table).insert(attempt);
+        if (!error) return null;
+        if (isMissingConsentColumns(error) && "privacy_policy_version" in attempt) {
+          attempt = withoutConsentFields(attempt);
+        } else if (isMissingPaynowMobileColumn(error) && "paynow_mobile" in attempt) {
+          const { paynow_mobile: _dropped, ...rest } = attempt;
+          void _dropped;
+          attempt = rest;
+        } else {
+          return error;
+        }
+      }
+      return (await supabase.from(table).insert(attempt)).error;
     }
 
     run("submit", async () => {
@@ -159,17 +213,19 @@ export function ApplyForm({ userId }: { userId: string }) {
           business_type: businessType,
           business_address: businessAddress.trim(),
           postal_code: postalCode.trim(),
-          description,
-          paynow_uen: paynowUen,
+          // paynow_uen (existing column) + paynow_mobile (new), normalised.
+          ...paynowApplicationFields(paynowMobile, paynowUen),
           // Home cooks don't register a business, so they never send one (the
           // insert trigger also clears it for them).
           business_uen: requiresBusinessUen(businessType) ? normalizeBusinessUen(businessUen) : null,
           ...consent,
         });
         if (error) {
+          trackerRef.current?.track({ event: "validation_error", code: "server_error" });
           setError(error.message);
           return;
         }
+        trackerRef.current?.track({ event: "submit_success" });
       } else if (roleChoice === "rider") {
         const error = await insertApplication("rider_applications", {
           user_id: userId,
@@ -256,6 +312,7 @@ export function ApplyForm({ userId }: { userId: string }) {
                   setGpsConsent(false);
                   setRideRegions([]);
                   setRoleChoice(option.role);
+                  if (option.role === "cook") trackerRef.current?.track({ event: "cook_form_view" });
                 }}
                 className="group w-full rounded-2xl border px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
                 style={{ borderColor: "rgba(124,58,237,0.12)", background: "white", color: "var(--kb-ink)" }}
@@ -300,9 +357,26 @@ export function ApplyForm({ userId }: { userId: string }) {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="kb-card-pop space-y-4 p-5">
+        <form
+          onSubmit={handleSubmit}
+          // Tracking (cook only): the first focus of each field, and the
+          // browser's own "please fill in this field" checks, which stop the
+          // submit before handleSubmit runs. Field names only, never values.
+          onFocusCapture={(e) => {
+            const name = (e.target as unknown as HTMLInputElement).name;
+            if (name && isCookFormField(name)) tracker()?.fieldFocused(name);
+          }}
+          onInvalidCapture={(e) => {
+            const el = e.target as unknown as HTMLInputElement;
+            if (el.name && isCookFormField(el.name)) {
+              trackError(el.name, el.validity?.valueMissing ? (el.name === "privacy_ack" ? "privacy_required" : "required") : "invalid_format");
+            }
+          }}
+          className="kb-card-pop space-y-4 p-5"
+        >
           <Field label="Full name (as per NRIC)">
             <input
+              name="full_name"
               required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -312,6 +386,7 @@ export function ApplyForm({ userId }: { userId: string }) {
           </Field>
           <Field label="Contact number">
             <input
+              name="contact_number"
               required
               type="tel"
               value={contactNumber}
@@ -323,10 +398,10 @@ export function ApplyForm({ userId }: { userId: string }) {
           {roleChoice === "cook" ? (
             <>
               <Field label="Business name">
-                <input required value={businessName} onChange={(e) => setBusinessName(e.target.value)} className="kb-input" />
+                <input name="business_name" required value={businessName} onChange={(e) => setBusinessName(e.target.value)} className="kb-input" />
               </Field>
               <Field label="Business type">
-                <select value={businessType} onChange={(e) => setBusinessType(e.target.value)} className="kb-input">
+                <select name="business_type" value={businessType} onChange={(e) => setBusinessType(e.target.value)} className="kb-input">
                   {MERCHANT_CATEGORIES.map((c) => (
                     <option key={c.id}>{c.label}</option>
                   ))}
@@ -335,6 +410,7 @@ export function ApplyForm({ userId }: { userId: string }) {
               {requiresBusinessUen(businessType) && (
                 <Field label="Business Registration Number (UEN)">
                   <input
+                    name="business_uen"
                     required
                     value={businessUen}
                     onChange={(e) => setBusinessUen(e.target.value)}
@@ -347,6 +423,7 @@ export function ApplyForm({ userId }: { userId: string }) {
               )}
               <Field label="Business Address">
                 <input
+                  name="business_address"
                   required
                   value={businessAddress}
                   onChange={(e) => setBusinessAddress(e.target.value)}
@@ -357,6 +434,7 @@ export function ApplyForm({ userId }: { userId: string }) {
               </Field>
               <Field label="Postal Code">
                 <input
+                  name="postal_code"
                   required
                   value={postalCode}
                   onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -368,12 +446,48 @@ export function ApplyForm({ userId }: { userId: string }) {
                   autoComplete="postal-code"
                 />
               </Field>
-              <Field label="Tell customers about your food">
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="kb-input" rows={3} />
-              </Field>
-              <Field label="PayNow UEN (customers pay you directly)">
-                <input value={paynowUen} onChange={(e) => setPaynowUen(e.target.value)} className="kb-input" />
-              </Field>
+              <section className="kb-card space-y-3 p-4">
+                <div>
+                  <h2 className="font-display text-base font-bold" style={{ color: "var(--kb-ink)" }}>
+                    How customers pay you (PayNow)
+                  </h2>
+                  <p className="mt-0.5 text-xs leading-5" style={{ color: "var(--kb-ink-soft)" }}>
+                    Customers pay you directly. Fill in one of these. If you fill in both, customers pay your UEN.
+                  </p>
+                </div>
+                <Field label="PayNow mobile number">
+                  <input
+                    name="paynow_mobile"
+                    type="tel"
+                    inputMode="tel"
+                    value={paynowMobile}
+                    onChange={(e) => setPaynowMobile(e.target.value)}
+                    className="kb-input"
+                    placeholder="e.g. 91234567"
+                    autoComplete="off"
+                  />
+                  {!paynowMobile && contactNumber.trim() && (
+                    <UseValueButton onClick={() => setPaynowMobile(contactNumber.trim())}>Use my contact number</UseValueButton>
+                  )}
+                </Field>
+                <Field label="PayNow UEN (if your PayNow is under a UEN)">
+                  <input
+                    name="paynow_uen"
+                    value={paynowUen}
+                    onChange={(e) => setPaynowUen(e.target.value)}
+                    className="kb-input"
+                    placeholder="e.g. 53123456X"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                  />
+                  {!paynowUen && requiresBusinessUen(businessType) && businessUen.trim() && (
+                    <UseValueButton onClick={() => setPaynowUen(businessUen.trim())}>Same as my business UEN</UseValueButton>
+                  )}
+                </Field>
+                <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>
+                  You can tell customers about your food when you set up your kitchen, after HQ approves you.
+                </p>
+              </section>
             </>
           ) : roleChoice === "rider" ? (
             <>
@@ -408,6 +522,7 @@ export function ApplyForm({ userId }: { userId: string }) {
 
           <button
             type="submit"
+            onClick={() => tracker()?.track({ event: "submit_attempt" })}
             disabled={loading || photoUploading}
             className="kb-btn-primary w-full py-3.5 text-[15px]"
           >
@@ -463,6 +578,7 @@ function PrivacyAcknowledgement({ role, checked, onChange }: { role: PartnerRole
       <label className="flex items-start gap-3">
         <input
           type="checkbox"
+          name="privacy_ack"
           required
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
@@ -490,6 +606,15 @@ function GpsConsent({ checked, onChange }: { checked: boolean; onChange: (v: boo
       </label>
       <p className="text-xs" style={{ color: "var(--kb-ink-soft)" }}>{GPS_CONSENT_COPY.note}</p>
     </section>
+  );
+}
+
+/** A small "fill this in for me" link under a field. */
+function UseValueButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="mt-1.5 text-xs font-semibold underline" style={{ color: "var(--kb-purple)" }}>
+      {children}
+    </button>
   );
 }
 

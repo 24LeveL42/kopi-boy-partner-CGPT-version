@@ -1,6 +1,7 @@
 import type { Profile, CookApplication, RiderApplication } from "./types-auth";
 import type { MerchantCategory } from "./types-kitchen";
 import { categoryForBusinessType } from "./kitchen-profile.ts";
+import { paynowPrefill, type PaynowType } from "./paynow-details.ts";
 
 /**
  * Everything the signed-in home route (`/`) needs to decide which screen to
@@ -30,6 +31,13 @@ export interface KitchenDefaults {
   latitude: number | null;
   longitude: number | null;
   description: string;
+  /**
+   * First-time Kitchen Setup only: PayNow from the cook application (UEN if
+   * given, else the mobile number). The edit page never sets these, so an
+   * existing kitchen's saved PayNow is never replaced by application data.
+   */
+  paynow_type?: PaynowType;
+  paynow_value?: string;
 }
 
 export type PartnerScreen =
@@ -51,6 +59,7 @@ export type PartnerScreen =
   | { kind: "approval-finishing"; as: "cook" | "rider" };
 
 function kitchenSetupFor(app: CookApplication): PartnerScreen {
+  const paynow = paynowPrefill(app);
   return {
     kind: "kitchen-setup",
     defaults: {
@@ -61,6 +70,7 @@ function kitchenSetupFor(app: CookApplication): PartnerScreen {
       latitude: null,
       longitude: null,
       description: app.description ?? "",
+      ...(paynow ? { paynow_type: paynow.type, paynow_value: paynow.value } : {}),
     },
   };
 }

@@ -27,7 +27,10 @@ export interface CookApplication {
   neighbourhood: string | null;
   business_address: string | null;
   postal_code: string | null;
+  /** PayNow UEN given at sign-up (older applications: free text). Only pre-fills Kitchen Setup. */
   paynow_uen: string | null;
+  /** PayNow mobile number given at sign-up, 8 digits (docs/supabase-paynow-mobile.sql). Optional: missing until that SQL has run. */
+  paynow_mobile?: string | null;
   business_uen: string | null;
   status: ApplicationStatus;
   created_at: string;
