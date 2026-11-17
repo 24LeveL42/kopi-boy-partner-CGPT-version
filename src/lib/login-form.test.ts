@@ -79,10 +79,20 @@ describe("LoginForm: never stuck on 'Redirecting…'", () => {
 
 describe("LoginForm: in-app browser banner", () => {
   it("uses the agreed plain-language wording, with a Copy link button", () => {
-    assert.equal(IN_APP_BROWSER_COPY.message, "To sign in, tap the ⋮ (or share) icon and choose 'Open in browser' (Chrome or Safari).");
+    assert.equal(IN_APP_BROWSER_COPY.message, "To sign in, tap the ⋮ or ⋯ (or share) icon and choose 'Open in browser' (Chrome or Safari).");
+    assert.equal(IN_APP_BROWSER_COPY.copyFailed, "Couldn't copy. Please use the ⋮ or ⋯ (or share) icon instead.");
     assert.equal(IN_APP_BROWSER_COPY.copyLink, "Copy link");
     assert.match(source, /IN_APP_BROWSER_COPY\.message/);
     assert.match(source, /onClick=\{copyLink\}/);
+  });
+
+  it("names both menu icons wherever it mentions one (Android ⋮, iPhone / TikTok / WeChat ⋯)", () => {
+    // One banner serves every detected app, so every line of it must name both.
+    for (const text of Object.values(IN_APP_BROWSER_COPY)) {
+      if (text.includes("⋮") || text.includes("⋯")) assert.match(text, /⋮ or ⋯ \(or share\)/, text);
+    }
+    // And the form uses only this copy: no menu icon written into the component itself.
+    assert.ok(!/[⋮⋯]/.test(source));
   });
 
   it("only appears inside an in-app browser, and never on the server render", () => {
