@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { SigninOutcome } from "@/components/SigninOutcome";
 import { StatusScreen } from "@/components/StatusScreen";
 import { RetryScreen } from "@/components/RetryScreen";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -32,28 +33,38 @@ export default async function WelcomePage() {
     kitchen: state?.kitchen ?? null,
   });
 
-  switch (decision.kind) {
-    case "redirect":
-      return redirect(decision.to);
-    case "staff-account":
-      return <StatusScreen tone="neutral" signOut title={STAFF_ACCOUNT_COPY.title} message={STAFF_ACCOUNT_COPY.message} />;
-    case "approval-finishing":
-      return (
-        <StatusScreen tone="neutral" signOut title={APPROVAL_FINISHING_COPY.title} message={APPROVAL_FINISHING_COPY.message}>
-          <RefreshButton label={APPROVAL_FINISHING_COPY.checkAgain} pendingText={APPROVAL_FINISHING_COPY.checking} />
-        </StatusScreen>
-      );
-    case "celebrate":
-      return (
-        <WelcomeCelebration
-          userId={user!.id}
-          title={decision.title}
-          greeting={decision.greeting}
-          pricing={decision.pricing}
-          primary={decision.primary}
-          secondary={decision.secondary}
-          confetti={decision.confetti}
-        />
-      );
-  }
+  // Every signed-in screen except the sign-up form also reports, once per
+  // sign-in, that this was an existing account (src/components/SigninOutcome.tsx).
+  const content = (() => {
+    switch (decision.kind) {
+      case "redirect":
+        return redirect(decision.to);
+      case "staff-account":
+        return <StatusScreen tone="neutral" signOut title={STAFF_ACCOUNT_COPY.title} message={STAFF_ACCOUNT_COPY.message} />;
+      case "approval-finishing":
+        return (
+          <StatusScreen tone="neutral" signOut title={APPROVAL_FINISHING_COPY.title} message={APPROVAL_FINISHING_COPY.message}>
+            <RefreshButton label={APPROVAL_FINISHING_COPY.checkAgain} pendingText={APPROVAL_FINISHING_COPY.checking} />
+          </StatusScreen>
+        );
+      case "celebrate":
+        return (
+          <WelcomeCelebration
+            userId={user!.id}
+            title={decision.title}
+            greeting={decision.greeting}
+            pricing={decision.pricing}
+            primary={decision.primary}
+            secondary={decision.secondary}
+            confetti={decision.confetti}
+          />
+        );
+    }
+  })();
+  return (
+    <>
+      {content}
+      <SigninOutcome staff={decision.kind === "staff-account"} />
+    </>
+  );
 }

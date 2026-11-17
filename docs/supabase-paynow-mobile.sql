@@ -8,7 +8,7 @@
 -- RUN ORDER: after docs/supabase-schema.sql. Run it BEFORE deploying the
 -- Partner app release that has the two PayNow boxes (if the app ships first,
 -- the form still submits, but the mobile number is not saved — see
--- insertCookApplication in src/components/ApplyForm.tsx).
+-- insertApplication in src/components/ApplyForm.tsx).
 --
 -- The cook application form now asks for a PayNow mobile number and/or a
 -- PayNow UEN (at least one; the app checks that). The UEN keeps using the

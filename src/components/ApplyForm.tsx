@@ -10,6 +10,7 @@ import { isMissingPaynowMobileColumn, paynowApplicationFields, paynowProblem } f
 import {
   createBrowserTracker,
   isCookFormField,
+  takeSigninTracked,
   type CookFormField,
   type RegistrationTracker,
   type ValidationCode,
@@ -63,6 +64,9 @@ export function ApplyForm({ userId }: { userId: string }) {
   useEffect(() => {
     const { tracker, dispose } = createBrowserTracker();
     trackerRef.current = tracker;
+    // Reaching this screen after sign-in means a new applicant, so the
+    // "existing account" check must not fire later in this tab.
+    takeSigninTracked();
     tracker.track({ event: "page_view" });
     return () => {
       trackerRef.current = null;
@@ -312,7 +316,7 @@ export function ApplyForm({ userId }: { userId: string }) {
                   setGpsConsent(false);
                   setRideRegions([]);
                   setRoleChoice(option.role);
-                  if (option.role === "cook") trackerRef.current?.track({ event: "cook_form_view" });
+                  trackerRef.current?.track({ event: option.role === "cook" ? "cook_form_view" : "rider_form_view" });
                 }}
                 className="group w-full rounded-2xl border px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
                 style={{ borderColor: "rgba(124,58,237,0.12)", background: "white", color: "var(--kb-ink)" }}

@@ -1,6 +1,19 @@
 -- ============================================================================
 -- KOPI BOY — Cook registration funnel tracking (Partner app sign-up)
 --
+-- FUNNEL: sign-in screen (signed out) → Google → partner sign-up (role
+-- choice) → cook form → submitted. One anonymous session id per browser tab
+-- carries through the Google round-trip, so a session's rows tell where it
+-- stopped:
+--   * signin_view, no signin_click          → left before Google
+--   * signin_click, no page_view and no
+--     existing_account                      → left at (or failed) Google
+--   * existing_account                      → an existing partner signing
+--                                             back in: not a new sign-up
+--   * page_view → cook_form_view → form_start / field_reached → submit_success
+-- The sign-in screen is shared with rider applicants: rider_form_view marks
+-- them after sign-in.
+--
 -- One transaction, safe to re-run. ADDITIVE ONLY: one new table, one new
 -- function. Nothing existing is changed or dropped.
 --
@@ -31,11 +44,14 @@
 -- twice.
 --
 -- TEST SESSIONS: is_test is true when the app says so (localhost, dev
--- builds, or a device marked with ?kb_test=1) or when the caller is signed in
--- as an admin. Reports must filter `where not is_test`.
+-- builds, a device marked with ?kb_test=1, or an HQ account signing in —
+-- which also marks that device as test from then on) or when the caller is
+-- signed in as an admin. Reports must leave out every session that has ANY
+-- is_test row (an admin's sign-in screen rows are sent before the app knows
+-- it's an admin).
 --
--- ABANDONED (for the Phase 2 report): a session with form_start, no
--- submit_success, and no event in the last 30 minutes. An explicit 'abandon'
+-- ABANDONED (for the Phase 2 report; 30 minutes approved): a session with
+-- form_start, no submit_success, and no event in the last 30 minutes. An explicit 'abandon'
 -- row (tab closed mid-form) also records the last field touched.
 -- ============================================================================
 
@@ -45,8 +61,11 @@ create table if not exists public.registration_events (
   id bigint generated always as identity primary key,
   session_id uuid not null,
   form text not null default 'cook' check (form in ('cook')),
+  -- Same list as RegistrationEventType in src/lib/registration-tracking.ts.
   event_type text not null check (event_type in (
-    'page_view', 'cook_form_view', 'form_start', 'field_reached',
+    'signin_view', 'in_app_browser', 'chose_sign_up', 'chose_sign_in', 'signin_click',
+    'signin_error', 'existing_account',
+    'page_view', 'cook_form_view', 'rider_form_view', 'form_start', 'field_reached',
     'submit_attempt', 'validation_error', 'submit_success', 'abandon'
   )),
   -- '' = not about a field. Same list as COOK_FORM_FIELDS in src/lib/registration-tracking.ts.
@@ -58,7 +77,8 @@ create table if not exists public.registration_events (
   -- '' = no error. Same list as ValidationCode in src/lib/registration-tracking.ts.
   error_code text not null default '' check (error_code in (
     '', 'required', 'invalid_format', 'invalid_postal_code', 'invalid_business_uen',
-    'paynow_missing', 'invalid_mobile', 'invalid_uen', 'privacy_required', 'server_error'
+    'paynow_missing', 'invalid_mobile', 'invalid_uen', 'privacy_required', 'server_error',
+    'google_error', 'auth_failed', 'google_slow'
   )),
   is_test boolean not null default false,
   created_at timestamptz not null default now()
@@ -129,14 +149,17 @@ begin
     from jsonb_array_elements(p_events) as e
    where jsonb_typeof(e) = 'object'
      and (e ->> 'event') in (
-       'page_view', 'cook_form_view', 'form_start', 'field_reached',
+       'signin_view', 'in_app_browser', 'chose_sign_up', 'chose_sign_in', 'signin_click',
+       'signin_error', 'existing_account',
+       'page_view', 'cook_form_view', 'rider_form_view', 'form_start', 'field_reached',
        'submit_attempt', 'validation_error', 'submit_success', 'abandon')
      and coalesce(e ->> 'field', '') in (
        '', 'full_name', 'contact_number', 'business_name', 'business_type', 'business_uen',
        'business_address', 'postal_code', 'paynow_mobile', 'paynow_uen', 'privacy_ack')
      and coalesce(e ->> 'code', '') in (
        '', 'required', 'invalid_format', 'invalid_postal_code', 'invalid_business_uen',
-       'paynow_missing', 'invalid_mobile', 'invalid_uen', 'privacy_required', 'server_error')
+       'paynow_missing', 'invalid_mobile', 'invalid_uen', 'privacy_required', 'server_error',
+       'google_error', 'auth_failed', 'google_slow')
   on conflict do nothing;
 end;
 $$;

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePendingAction } from "@/lib/use-pending-action";
 import { authCallbackUrl } from "@/lib/auth-callback";
 import { isInAppBrowser } from "@/lib/in-app-browser";
+import { createBrowserTracker, markSigninTracked, type RegistrationTracker } from "@/lib/registration-tracking";
 import { GOOGLE_SLOW_MESSAGE, GOOGLE_WAIT_MS, IN_APP_BROWSER_COPY } from "@/lib/onboarding-copy";
 import { useBackHandler } from "./AppChrome";
 import { Logo } from "./Logo";
@@ -56,6 +57,25 @@ export function LoginForm({
 
   const supabase = createClient();
 
+  // Anonymous sign-up funnel tracking (src/lib/registration-tracking.ts):
+  // where visitors stop before or at Google. Fire-and-forget; never delays
+  // the Google redirect.
+  const trackerRef = useRef<RegistrationTracker | null>(null);
+  useEffect(() => {
+    const { tracker, dispose } = createBrowserTracker();
+    trackerRef.current = tracker;
+    markSigninTracked();
+    tracker.track({ event: "signin_view" });
+    if (isInAppBrowser(navigator.userAgent)) tracker.track({ event: "in_app_browser" });
+    if (initialError) tracker.track({ event: "signin_error", code: "auth_failed" });
+    return () => {
+      trackerRef.current = null;
+      dispose();
+    };
+    // Once per mount: initialError is the server's ?error= value for this visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function copyLink() {
     navigator.clipboard
       .writeText(window.location.href)
@@ -75,9 +95,13 @@ export function LoginForm({
     setError(null);
     setIntent(next);
     setStep("google");
+    trackerRef.current?.track({ event: next === "signup" ? "chose_sign_up" : "chose_sign_in" });
   }
 
   function handleGoogleSignIn() {
+    // Sent now (keepalive), before the page leaves for Google.
+    trackerRef.current?.track({ event: "signin_click" });
+    trackerRef.current?.flush(true);
     run("google", async () => {
       setError(null);
 
@@ -92,13 +116,17 @@ export function LoginForm({
       });
 
       if (error) {
+        trackerRef.current?.track({ event: "signin_error", code: "google_error" });
         setError(error.message);
         return;
       }
 
       // Stay busy while the browser leaves for Google, but never forever:
       // Back from Google, or a redirect that never happens, frees the button.
-      if ((await waitForGoogleRedirect()) === "timeout") setError(GOOGLE_SLOW_MESSAGE);
+      if ((await waitForGoogleRedirect()) === "timeout") {
+        trackerRef.current?.track({ event: "signin_error", code: "google_slow" });
+        setError(GOOGLE_SLOW_MESSAGE);
+      }
     });
   }
 

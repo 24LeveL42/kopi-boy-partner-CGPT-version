@@ -33,8 +33,19 @@ export const MAX_BATCH = 20;
 export const FLUSH_DELAY_MS = 5000;
 
 export type RegistrationEventType =
+  // Sign-in screen (signed out; shared by cook and rider applicants and by
+  // existing partners signing back in — see existing_account below).
+  | "signin_view" // the sign-in screen was shown
+  | "in_app_browser" // shown inside Facebook / Instagram / Messenger, where Google sign-in is refused
+  | "chose_sign_up" // tapped "Sign up — I'm new"
+  | "chose_sign_in" // tapped "Sign in — I already have an account"
+  | "signin_click" // tapped the Google button (leaving for Google)
+  | "signin_error" // code: google_error | auth_failed | google_slow
+  | "existing_account" // after sign-in, this account already has an application or is a partner: not a new sign-up
+  // Partner sign-up and the cook form (signed in, no application yet).
   | "page_view" // the "Join as a partner" screen (role choice) was shown
   | "cook_form_view" // "I'm a cook" was chosen: the cook form is on screen
+  | "rider_form_view" // "I'm a rider" was chosen (not tracked further; lets Boss leave riders out)
   | "form_start" // first focus on any cook field
   | "field_reached" // first focus on a given field (field + step)
   | "submit_attempt" // "Submit application" pressed
@@ -71,7 +82,13 @@ export type ValidationCode =
   | "invalid_mobile"
   | "invalid_uen"
   | "privacy_required"
-  | "server_error";
+  | "server_error"
+  // Sign-in screen (signin_error only).
+  | "google_error"
+  | "auth_failed"
+  | "google_slow";
+
+export type SigninErrorCode = "google_error" | "auth_failed" | "google_slow";
 
 export interface RegistrationEvent {
   event: RegistrationEventType;
@@ -187,6 +204,38 @@ export class RegistrationTracker {
 
 const SESSION_KEY = "kb_reg_session";
 const TEST_KEY = "kb_reg_test";
+const SIGNIN_KEY = "kb_reg_signin";
+
+/**
+ * The sign-in screen was tracked in this tab. After Google, the next screen
+ * either shows the partner sign-up (page_view: a new applicant) or, for an
+ * account that already has an application or is a partner, records one
+ * existing_account event — only in a tab that came through the sign-in
+ * screen, so everyday use of the app sends nothing.
+ */
+export function markSigninTracked(): void {
+  try {
+    window.sessionStorage.setItem(SIGNIN_KEY, "1");
+  } catch {}
+}
+
+/** True once per tab after markSigninTracked(); clears it. */
+export function takeSigninTracked(): boolean {
+  try {
+    const was = window.sessionStorage.getItem(SIGNIN_KEY) === "1";
+    window.sessionStorage.removeItem(SIGNIN_KEY);
+    return was;
+  } catch {
+    return false;
+  }
+}
+
+/** HQ signed in on this device: never count it again (same as ?kb_test=1). */
+export function markTestDevice(): void {
+  try {
+    window.localStorage.setItem(TEST_KEY, "1");
+  } catch {}
+}
 
 /**
  * A test session is never counted: localhost, a dev build, or a device marked
@@ -277,10 +326,10 @@ function browserSender(session: string, isTest: boolean): SendBatch {
 }
 
 /** Wires a tracker to fetch and the page lifecycle. Returns a no-op-safe tracker plus a cleanup function. */
-export function createBrowserTracker(): { tracker: RegistrationTracker; dispose: () => void } {
+export function createBrowserTracker(options: { forceTest?: boolean } = {}): { tracker: RegistrationTracker; dispose: () => void } {
   let send: SendBatch = async () => {};
   try {
-    send = browserSender(sessionId(), testSession());
+    send = browserSender(sessionId(), options.forceTest === true || testSession());
   } catch {}
   const tracker = new RegistrationTracker({ send });
   const onHide = () => {

@@ -146,11 +146,19 @@ describe("isTestSession", () => {
 });
 
 describe("kept in sync with docs/supabase-registration-tracking.sql", () => {
-  const sql = readFileSync(new URL("../../docs/supabase-registration-tracking.sql", import.meta.url), "utf8");
+  // Code only: comments may mention a value without allowing it.
+  const sql = readFileSync(new URL("../../docs/supabase-registration-tracking.sql", import.meta.url), "utf8").replace(/--.*$/gm, "");
   it("allows every form field the app sends, in both the table check and the function", () => {
     for (const f of COOK_FORM_FIELDS) {
       assert.equal(sql.split(`'${f}'`).length - 1, 2, f);
     }
+  });
+  it("allows every event type the app sends, in both places", () => {
+    const src = readFileSync(new URL("./registration-tracking.ts", import.meta.url), "utf8");
+    const block = src.slice(src.indexOf("export type RegistrationEventType"), src.indexOf("export const COOK_FORM_FIELDS"));
+    const events = [...block.matchAll(/\| "([a-z_]+)"/g)].map((m) => m[1]);
+    assert.equal(events.length, 16);
+    for (const e of events) assert.equal(sql.split(`'${e}'`).length - 1, 2, e);
   });
   it("allows every error code the app sends", () => {
     const src = readFileSync(new URL("./registration-tracking.ts", import.meta.url), "utf8");

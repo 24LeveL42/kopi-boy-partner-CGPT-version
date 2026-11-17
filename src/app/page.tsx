@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { SigninOutcome } from "@/components/SigninOutcome";
 import { LoginForm } from "@/components/LoginForm";
 import { ApplyForm } from "@/components/ApplyForm";
 import { StatusScreen } from "@/components/StatusScreen";
@@ -67,85 +68,95 @@ export default async function Home() {
   // One-time "Your kitchen is live!" pop-up after the first kitchen save.
   const showKitchenLive = shouldShowKitchenLive({ screen, profile, kitchen, approvalCelebrationShowing: celebration !== null });
 
-  switch (screen.kind) {
-    case "staff-account":
-      return <StatusScreen tone="neutral" signOut title={STAFF_ACCOUNT_COPY.title} message={STAFF_ACCOUNT_COPY.message} />;
-    case "blocked":
-      // Replaces the whole cook / rider area. No block reason is
-      // stored, so none is shown — the partner asks HQ through the box below.
-      return (
-        <StatusScreen tone="warning" signOut title={BLOCKED_SCREEN_COPY.title} message={BLOCKED_SCREEN_COPY.body}>
-          <AdminMessagePanel userId={user.id} />
-        </StatusScreen>
-      );
-    case "application-pending":
-      return (
-        <StatusScreen tone="neutral" signOut title={PENDING_COPY.title} message={PENDING_COPY.message}>
-          <div className="space-y-4 text-left">
-            <div className="rounded-2xl px-4 py-3" style={{ background: "#F5F3FA" }}>
-              <p className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-purple)" }}>
-                {PENDING_COPY.stepsTitle}
-              </p>
-              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm" style={{ color: "var(--kb-ink)" }}>
-                {PENDING_COPY.steps[screen.as].map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ol>
+  // Every signed-in screen except the sign-up form also reports, once per
+  // sign-in, that this was an existing account (src/components/SigninOutcome.tsx).
+  const content = (() => {
+    switch (screen.kind) {
+      case "staff-account":
+        return <StatusScreen tone="neutral" signOut title={STAFF_ACCOUNT_COPY.title} message={STAFF_ACCOUNT_COPY.message} />;
+      case "blocked":
+        // Replaces the whole cook / rider area. No block reason is
+        // stored, so none is shown — the partner asks HQ through the box below.
+        return (
+          <StatusScreen tone="warning" signOut title={BLOCKED_SCREEN_COPY.title} message={BLOCKED_SCREEN_COPY.body}>
+            <AdminMessagePanel userId={user.id} />
+          </StatusScreen>
+        );
+      case "application-pending":
+        return (
+          <StatusScreen tone="neutral" signOut title={PENDING_COPY.title} message={PENDING_COPY.message}>
+            <div className="space-y-4 text-left">
+              <div className="rounded-2xl px-4 py-3" style={{ background: "#F5F3FA" }}>
+                <p className="text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--kb-purple)" }}>
+                  {PENDING_COPY.stepsTitle}
+                </p>
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm" style={{ color: "var(--kb-ink)" }}>
+                  {PENDING_COPY.steps[screen.as].map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+              {screen.as === "cook" && (
+                <p className="rounded-2xl px-4 py-2.5 text-center text-sm font-semibold" style={{ background: "var(--kb-mint)", color: "var(--kb-green-deep)" }}>
+                  {COOK_PRICING_LINE}
+                </p>
+              )}
+              {promptRideRegions ? <RideRegionsPrompt /> : null}
+              <RefreshButton label={PENDING_COPY.checkStatus} pendingText={PENDING_COPY.checking} />
             </div>
-            {screen.as === "cook" && (
-              <p className="rounded-2xl px-4 py-2.5 text-center text-sm font-semibold" style={{ background: "var(--kb-mint)", color: "var(--kb-green-deep)" }}>
-                {COOK_PRICING_LINE}
-              </p>
-            )}
-            {promptRideRegions ? <RideRegionsPrompt /> : null}
-            <RefreshButton label={PENDING_COPY.checkStatus} pendingText={PENDING_COPY.checking} />
-          </div>
-        </StatusScreen>
-      );
-    case "approval-finishing":
-      return (
-        <StatusScreen tone="neutral" signOut title={APPROVAL_FINISHING_COPY.title} message={APPROVAL_FINISHING_COPY.message}>
-          <RefreshButton label={APPROVAL_FINISHING_COPY.checkAgain} pendingText={APPROVAL_FINISHING_COPY.checking} />
-        </StatusScreen>
-      );
-    case "application-rejected":
-      return (
-        <StatusScreen
-          tone="danger"
-          signOut
-          title="Application not approved"
-          message="Your application wasn't approved this time. Contact Kopi Boy support if you'd like to know more or reapply."
-        />
-      );
-    case "kitchen-load-error":
-      return <RetryScreen signOut title={KITCHEN_LOAD_ERROR_COPY.title} message={KITCHEN_LOAD_ERROR_COPY.message} />;
-    case "kitchen-setup":
-      return (
-        <>
-          <KitchenSetupGate userId={user.id} defaults={screen.defaults} />
-          {celebrationCard}
-        </>
-      );
-    case "partner-shell":
-      return (
-        <>
-          <PartnerShell
-            userId={user.id}
-            defaultView={screen.view}
-            partnerName={profile?.full_name ?? null}
-            businessName={screen.view === "cook" ? kitchen?.business_name ?? null : null}
-            promptRideRegions={promptRideRegions}
-            riderProfile={
-              screen.view === "rider"
-                ? { fullName: profile?.full_name ?? null, phone: profile?.phone ?? null, photoUrl: profile?.photo_url ?? null }
-                : undefined
-            }
+          </StatusScreen>
+        );
+      case "approval-finishing":
+        return (
+          <StatusScreen tone="neutral" signOut title={APPROVAL_FINISHING_COPY.title} message={APPROVAL_FINISHING_COPY.message}>
+            <RefreshButton label={APPROVAL_FINISHING_COPY.checkAgain} pendingText={APPROVAL_FINISHING_COPY.checking} />
+          </StatusScreen>
+        );
+      case "application-rejected":
+        return (
+          <StatusScreen
+            tone="danger"
+            signOut
+            title="Application not approved"
+            message="Your application wasn't approved this time. Contact Kopi Boy support if you'd like to know more or reapply."
           />
-          {celebrationCard}
-          {showKitchenLive ? <KitchenLiveDialog userId={user.id} /> : null}
-        </>
-      );
-    case "apply":
-      return <ApplyForm userId={user.id} />;
-  }
+        );
+      case "kitchen-load-error":
+        return <RetryScreen signOut title={KITCHEN_LOAD_ERROR_COPY.title} message={KITCHEN_LOAD_ERROR_COPY.message} />;
+      case "kitchen-setup":
+        return (
+          <>
+            <KitchenSetupGate userId={user.id} defaults={screen.defaults} />
+            {celebrationCard}
+          </>
+        );
+      case "partner-shell":
+        return (
+          <>
+            <PartnerShell
+              userId={user.id}
+              defaultView={screen.view}
+              partnerName={profile?.full_name ?? null}
+              businessName={screen.view === "cook" ? kitchen?.business_name ?? null : null}
+              promptRideRegions={promptRideRegions}
+              riderProfile={
+                screen.view === "rider"
+                  ? { fullName: profile?.full_name ?? null, phone: profile?.phone ?? null, photoUrl: profile?.photo_url ?? null }
+                  : undefined
+              }
+            />
+            {celebrationCard}
+            {showKitchenLive ? <KitchenLiveDialog userId={user.id} /> : null}
+          </>
+        );
+      case "apply":
+        return <ApplyForm userId={user.id} />;
+    }
+  })();
+  return (
+    <>
+      {content}
+      {screen.kind === "apply" ? null : <SigninOutcome staff={screen.kind === "staff-account"} />}
+    </>
+  );
 }

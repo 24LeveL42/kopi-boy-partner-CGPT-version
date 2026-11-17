@@ -177,6 +177,26 @@ describe("docs/supabase-registration-tracking.sql", () => {
     assert.equal(await count(pg, "not is_test"), 1);
   });
 
+  it("accepts the sign-in screen events, so drop-off before and at Google is visible", async () => {
+    const pg = await db();
+    await pg.exec("begin");
+    await pg.exec("set local role anon");
+    await log(pg, [
+      { event: "signin_view" },
+      { event: "in_app_browser" },
+      { event: "chose_sign_up" },
+      { event: "signin_click" },
+      { event: "signin_error", code: "google_slow" },
+      { event: "signin_error", code: "auth_failed" },
+    ]);
+    await log(pg, [{ event: "existing_account" }], id(200));
+    await log(pg, [{ event: "page_view" }, { event: "rider_form_view" }], id(201));
+    await pg.exec("commit");
+    await pg.exec("reset role");
+    assert.equal(await count(pg, `session_id = '${SESSION}'`), 6);
+    assert.equal(await count(pg, "event_type in ('existing_account', 'rider_form_view')"), 2);
+  });
+
   it("stores no user id, IP or free text column", async () => {
     const pg = await db();
     const { rows } = await pg.query<{ column_name: string }>(
