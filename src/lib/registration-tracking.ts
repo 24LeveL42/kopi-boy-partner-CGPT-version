@@ -36,7 +36,7 @@ export type RegistrationEventType =
   // Sign-in screen (signed out; shared by cook and rider applicants and by
   // existing partners signing back in — see existing_account below).
   | "signin_view" // the sign-in screen was shown
-  | "in_app_browser" // shown inside Facebook / Instagram / Messenger, where Google sign-in is refused
+  | "in_app_browser" // shown inside an in-app browser (Facebook, Instagram, Messenger, TikTok, WeChat, LINE), where Google sign-in is refused
   | "chose_sign_up" // tapped "Sign up — I'm new"
   | "chose_sign_in" // tapped "Sign in — I already have an account"
   | "signin_click" // tapped the Google button (leaving for Google)

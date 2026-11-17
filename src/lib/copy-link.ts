@@ -1,6 +1,6 @@
 /**
  * Copies text for the "Copy link" button on the in-app browser banner.
- * Facebook / Instagram / Messenger's built-in browsers often have no
+ * In-app browsers (Facebook, Instagram, TikTok, WeChat, LINE…) often have no
  * navigator.clipboard (or refuse it), so this falls back to the older
  * select-and-copy trick before giving up. Never throws.
  */

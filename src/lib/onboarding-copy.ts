@@ -66,7 +66,7 @@ export const IN_APP_BROWSER_COPY = {
   title: "Open in your browser to sign in",
   message: "To sign in, tap the ⋮ (or share) icon and choose 'Open in browser' (Chrome or Safari).",
   /** Under the button: why, and the copy-link route. */
-  note: "Google sign-in doesn't work inside Facebook, Instagram or Messenger. Or copy the link and paste it into Chrome or Safari.",
+  note: "Google sign-in doesn't work inside apps like Facebook, Instagram, TikTok, WeChat or LINE. Or copy the link and paste it into Chrome or Safari.",
   copyLink: "Copy link",
   copied: "Link copied. Now paste it into Chrome or Safari.",
   copyFailed: "Couldn't copy. Please use the ⋮ (or share) icon instead.",
