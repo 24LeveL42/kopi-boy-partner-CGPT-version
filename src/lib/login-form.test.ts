@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { IN_APP_BROWSER_COPY } from "./onboarding-copy.ts";
 
 // node --test can't load .tsx, so these check LoginForm's source: Google is
 // the only sign-in method and none of the removed phone/SMS-code flow is left.
@@ -73,5 +74,41 @@ describe("LoginForm: never stuck on 'Redirecting…'", () => {
   it("shows the open-in-browser hint inside Facebook / Instagram", () => {
     assert.match(source, /isInAppBrowser\(navigator\.userAgent\)/);
     assert.match(source, /IN_APP_BROWSER_COPY\.title/);
+  });
+});
+
+describe("LoginForm: in-app browser banner", () => {
+  it("uses the agreed plain-language wording, with a Copy link button", () => {
+    assert.equal(IN_APP_BROWSER_COPY.message, "To sign in, tap the ⋮ (or share) icon and choose 'Open in browser' (Chrome or Safari).");
+    assert.equal(IN_APP_BROWSER_COPY.copyLink, "Copy link");
+    assert.match(source, /IN_APP_BROWSER_COPY\.message/);
+    assert.match(source, /onClick=\{copyLink\}/);
+  });
+
+  it("only appears inside an in-app browser, and never on the server render", () => {
+    // Rendered only behind the user-agent check; the server snapshot is a normal browser.
+    assert.match(source, /\{inAppBrowser && \(/);
+    assert.match(source, /useSyncExternalStore\(subscribeNever, \(\) => isInAppBrowser\(navigator\.userAgent\), \(\) => false\)/);
+  });
+
+  it("copies with a fallback and never throws (no bare navigator.clipboard call)", () => {
+    assert.match(source, /copyText\(window\.location\.href, \{ clipboard: navigator\.clipboard, legacyCopy \}\)/);
+    assert.ok(!/navigator\.clipboard\s*\.\s*writeText/.test(source));
+  });
+
+  it("keeps the Google button: the banner is a hint, not a block", () => {
+    assert.match(source, /onClick=\{handleGoogleSignIn\}/);
+    assert.ok(!/inAppBrowser\s*\?\s*null/.test(source));
+  });
+});
+
+describe("the sign-in screen is only for signed-out visitors", () => {
+  const home = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const login = readFileSync(new URL("../app/login/page.tsx", import.meta.url), "utf8");
+  it("/ shows LoginForm only when there is no user", () => {
+    assert.match(home, /if \(!user\) \{\s*return <LoginForm \/>;/);
+  });
+  it("/login sends a signed-in user straight on", () => {
+    assert.match(login, /if \(auth\.user\) redirect\(next\);/);
   });
 });

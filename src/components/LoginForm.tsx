@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { usePendingAction } from "@/lib/use-pending-action";
 import { authCallbackUrl } from "@/lib/auth-callback";
 import { isInAppBrowser } from "@/lib/in-app-browser";
+import { copyText, legacyCopy } from "@/lib/copy-link";
 import { createBrowserTracker, markSigninTracked, type RegistrationTracker } from "@/lib/registration-tracking";
 import { GOOGLE_SLOW_MESSAGE, GOOGLE_WAIT_MS, IN_APP_BROWSER_COPY } from "@/lib/onboarding-copy";
 import { useBackHandler } from "./AppChrome";
@@ -76,10 +77,11 @@ export function LoginForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Many in-app browsers have no clipboard API: copyText falls back, never throws.
   function copyLink() {
-    navigator.clipboard
-      .writeText(window.location.href)
-      .then(() => setCopyState("copied"), () => setCopyState("failed"));
+    void copyText(window.location.href, { clipboard: navigator.clipboard, legacyCopy }).then((ok) =>
+      setCopyState(ok ? "copied" : "failed"),
+    );
   }
 
   useBackHandler(
@@ -183,16 +185,20 @@ export function LoginForm({
         >
           {inAppBrowser && (
             <div
+              role="alert"
               className="mb-4 rounded-2xl border px-4 py-3 text-left"
               style={{ borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.08)" }}
             >
               <p className="text-sm font-bold" style={{ color: "var(--kb-ink)" }}>
                 {IN_APP_BROWSER_COPY.title}
               </p>
-              <p className="mt-1 text-xs leading-5" style={{ color: "var(--kb-ink-soft)" }}>
+              <p className="mt-1 text-sm leading-6 font-semibold" style={{ color: "var(--kb-ink)" }}>
                 {IN_APP_BROWSER_COPY.message}
               </p>
-              <button type="button" onClick={copyLink} className="kb-btn-secondary mt-3 w-full py-2.5 text-sm">
+              <p className="mt-1 text-xs leading-5" style={{ color: "var(--kb-ink-soft)" }}>
+                {IN_APP_BROWSER_COPY.note}
+              </p>
+              <button type="button" onClick={copyLink} aria-live="polite" className="kb-btn-secondary mt-3 w-full py-2.5 text-sm">
                 {copyState === "copied"
                   ? IN_APP_BROWSER_COPY.copied
                   : copyState === "failed"
