@@ -12,6 +12,7 @@ import { FormField as Field } from "./FormField";
 import { useBackHandler, useCancelHandler } from "./AppChrome";
 import type { Kitchen, KitchenPrivate, MenuItem, MerchantCategory, CuisineType, PaynowType } from "@/lib/types-kitchen";
 import { saveKitchenRow } from "@/lib/kitchen-private";
+import { kitchenPaynowCheck } from "@/lib/paynow-details";
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
 import { NEW_TAB, PRIVACY_LINK_LABEL, PRIVACY_URL, TERMS_LINK_LABEL, TERMS_URL } from "@/lib/legal-links";
@@ -328,6 +329,11 @@ export function KitchenSetupForm({
       setError("Postal code must be 6 digits (e.g. 310123).");
       return;
     }
+    const paynowCheck = currentPaynowCheck();
+    if (!paynowCheck.ok) {
+      setError(paynowCheck.message);
+      return;
+    }
     if (!acknowledged) {
       setError("Please tick the acknowledgement before saving.");
       return;
@@ -449,7 +455,19 @@ export function KitchenSetupForm({
     setNotice("We kept the items your deals use. Review your menu, then save again.");
   }
 
+  // Required on every save; never blocks when the saved PayNow didn't load.
+  function currentPaynowCheck() {
+    return kitchenPaynowCheck({ type: paynowType, value: paynowValue, loadFailed: privateLoadFailed, edited: paynowEdited });
+  }
+
   async function saveKitchen(plan: MenuSavePlan, addonJobs: AddonJob[], stopDealIds: string[]) {
+    // Checked again here: the removal dialog's save comes back through here.
+    const paynowCheck = currentPaynowCheck();
+    if (!paynowCheck.ok) {
+      setError(paynowCheck.message);
+      return;
+    }
+
     // Geocode before writing anything, so a failed lookup never leaves a
     // half-saved kitchen or a wrong position behind.
     const postal = postalCode.trim();
@@ -468,8 +486,8 @@ export function KitchenSetupForm({
       is_halal: isHalal,
       description: description.trim() || null,
       hero_image: heroImage.trim() || null,
-      // If PayNow didn't load, empty fields mean "unknown", not "remove it".
-      ...(privateLoadFailed && !paynowEdited ? {} : { paynow_type: paynowType, paynow_value: paynowValue.trim() || null }),
+      // Cleaned-up PayNow, or nothing (keep the saved one) if it didn't load.
+      ...paynowCheck.fields,
       // Any non-null value means "ticked" — the DB stamps its own now()
       // the first time and keeps that original timestamp afterwards.
       acknowledged_terms_at: new Date().toISOString(),
@@ -810,9 +828,9 @@ export function KitchenSetupForm({
                 className="kb-input"
               />
             </Field>
-            {privateLoadFailed && !paynowEdited && (
+            {privateLoadFailed && (
               <p className="rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }} role="status">
-                We couldn&apos;t load your PayNow details. Saving keeps them as they are unless you enter new ones here.
+                We couldn&apos;t load your PayNow details. Saving keeps them as they are unless you enter new, valid ones here.
               </p>
             )}
           </section>

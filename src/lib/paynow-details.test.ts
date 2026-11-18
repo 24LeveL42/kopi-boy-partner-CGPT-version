@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   isMissingPaynowMobileColumn,
+  kitchenPaynowCheck,
   normalizePaynowMobile,
   paynowApplicationFields,
   paynowPrefill,
@@ -110,5 +111,61 @@ describe("isMissingPaynowMobileColumn", () => {
     assert.equal(isMissingPaynowMobileColumn({ code: "PGRST204", message: "Could not find the 'privacy_policy_version' column" }), false);
     assert.equal(isMissingPaynowMobileColumn({ code: "23514", message: "paynow_mobile bad" }), false);
     assert.equal(isMissingPaynowMobileColumn(null), false);
+  });
+});
+
+describe("Kitchen Setup save: PayNow required, cleaned up", () => {
+  const save = (type: "mobile" | "uen", value: string, opts: { loadFailed?: boolean; edited?: boolean } = {}) =>
+    kitchenPaynowCheck({ type, value, loadFailed: opts.loadFailed ?? false, edited: opts.edited ?? false });
+
+  it("saves a mobile number as 8 digits, no +65 or spacing", () => {
+    for (const raw of ["+65 9123 4567", "65-9123-4567", " 91234567 ", "6591234567"]) {
+      assert.deepEqual(save("mobile", raw), { ok: true, fields: { paynow_type: "mobile", paynow_value: "91234567" } }, raw);
+    }
+  });
+
+  it("saves a UEN in upper case without spaces", () => {
+    assert.deepEqual(save("uen", " t24ll 1234a "), { ok: true, fields: { paynow_type: "uen", paynow_value: "T24LL1234A" } });
+  });
+
+  it("blocks an empty PayNow on every save, edited or not, with the registration message", () => {
+    for (const edited of [false, true]) {
+      for (const type of ["mobile", "uen"] as const) {
+        const r = save(type, "  ", { edited });
+        assert.equal(r.ok, false);
+        if (!r.ok) assert.equal(r.message, paynowProblem("", "")!.message);
+      }
+    }
+  });
+
+  it("blocks a bad mobile number or UEN with the registration messages", () => {
+    const badMobile = save("mobile", "61234567");
+    assert.ok(!badMobile.ok && /8 digits starting with 8 or 9/.test(badMobile.message));
+    // A UEN typed into the mobile box is checked as a mobile number.
+    assert.equal(save("mobile", "53123456X").ok, false);
+    const badUen = save("uen", "91234567");
+    assert.ok(!badUen.ok && badUen.message === paynowProblem("", "91234567")!.message);
+  });
+
+  it("also blocks an already-saved value that no longer passes (strict on every save)", () => {
+    assert.equal(save("uen", "DBS 123-456789-0", { edited: false }).ok, false);
+  });
+
+  describe("when the saved PayNow did not load", () => {
+    it("never blocks, and keeps the saved PayNow if the fields are untouched or empty", () => {
+      assert.deepEqual(save("mobile", "", { loadFailed: true }), { ok: true, fields: {} });
+      assert.deepEqual(save("uen", "", { loadFailed: true, edited: true }), { ok: true, fields: {} });
+    });
+
+    it("never blocks on badly typed new details, and keeps the saved PayNow", () => {
+      assert.deepEqual(save("mobile", "123", { loadFailed: true, edited: true }), { ok: true, fields: {} });
+    });
+
+    it("saves valid new details, cleaned up", () => {
+      assert.deepEqual(save("mobile", "+65 8123 4567", { loadFailed: true, edited: true }), {
+        ok: true,
+        fields: { paynow_type: "mobile", paynow_value: "81234567" },
+      });
+    });
   });
 });

@@ -108,3 +108,28 @@ export function isMissingPaynowMobileColumn(error: { code?: string; message?: st
   if (!error || (error.code !== "PGRST204" && error.code !== "42703")) return false;
   return (error.message ?? "").includes("paynow_mobile");
 }
+
+export type KitchenPaynowCheck =
+  /** Save these with the kitchen; {} = leave the saved PayNow as it is. */
+  | { ok: true; fields: { paynow_type: PaynowType; paynow_value: string } | Record<string, never> }
+  | { ok: false; message: string };
+
+/**
+ * PayNow on a Kitchen Setup save. Required on every save, with the same
+ * checks and messages as registration, and stored cleaned up (8 digits for a
+ * mobile number, upper case for a UEN) — the Customer app shows a mobile
+ * number as "+65 <number>".
+ *
+ * Safeguard: if the saved PayNow couldn't be loaded (loadFailed), the save is
+ * never blocked. Untouched or empty fields keep the saved PayNow, and new
+ * details are saved only if they pass the check; otherwise the saved PayNow
+ * is kept too.
+ */
+export function kitchenPaynowCheck(input: { type: PaynowType; value: string; loadFailed: boolean; edited: boolean }): KitchenPaynowCheck {
+  const { type, value, loadFailed, edited } = input;
+  const problem = type === "mobile" ? paynowProblem(value, "") : paynowProblem("", value);
+  if (loadFailed && (!edited || problem)) return { ok: true, fields: {} };
+  if (problem) return { ok: false, message: problem.message };
+  const paynow_value = type === "mobile" ? normalizePaynowMobile(value) : normalizePaynowUen(value);
+  return { ok: true, fields: { paynow_type: type, paynow_value } };
+}
