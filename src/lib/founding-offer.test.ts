@@ -78,3 +78,47 @@ describe("offer shows once per browser session", () => {
     assert.equal(claimOfferShow(null), true);
   });
 });
+
+// node --test can't load .tsx, so these check the pop-up's source (layout
+// itself was measured in a browser at 360x640 and 1280x800).
+describe("offer pop-up: K3 mascot is decorative and never in the way", async () => {
+  const { readFileSync, statSync } = await import("node:fs");
+  const source = readFileSync(new URL("../components/FoundingOfferPopup.tsx", import.meta.url), "utf8");
+  const mascot = source.match(/function Mascot[\s\S]*?<Image([\s\S]*?)\/>/)?.[1] ?? "";
+  const xButton = source.match(/<button[^>]*?data-autofocus[\s\S]*?className="([^"]*)"/)?.[1] ?? "";
+  const z = (cls: string) => Number(cls.match(/\bz-(\d+)\b/)?.[1] ?? NaN);
+
+  it("is hidden from screen readers and can't take taps or focus", () => {
+    assert.match(mascot, /alt=""/);
+    assert.match(mascot, /aria-hidden="true"/);
+    assert.match(mascot, /pointer-events-none/);
+    assert.doesNotMatch(mascot, /tabIndex|onClick/);
+  });
+
+  it("sits below the X, so it can never cover it", () => {
+    assert.ok(z(xButton) > z(mascot), `X z-${z(xButton)} vs mascot z-${z(mascot)}`);
+  });
+
+  it("has explicit width/height, is absolutely positioned, and doesn't preload into the landing page", () => {
+    assert.match(mascot, /width=\{360\}/);
+    assert.match(mascot, /height=\{334\}/);
+    assert.match(mascot, /\babsolute\b/);
+    assert.doesNotMatch(mascot, /\bpreload\b|\bpriority\b/);
+  });
+
+  it("is dropped if the image fails to load", () => {
+    assert.match(mascot, /onError=\{onError\}/);
+    assert.match(source, /mascotOk \? <Mascot onError=\{\(\) => setMascotOk\(false\)\} \/> : null/);
+  });
+
+  it("the asset is a small WebP", () => {
+    const file = new URL("../../public/mascot/k3-thumbs-up.webp", import.meta.url);
+    const size = statSync(file).size;
+    assert.ok(size > 10_000 && size <= 60 * 1024, `${size} bytes`);
+    assert.equal(readFileSync(file).subarray(8, 12).toString("latin1"), "WEBP");
+  });
+
+  it('"Join as a rider" has a 44px tap area (20px text + 12px above and below)', () => {
+    assert.match(source, /before:absolute before:inset-x-0 before:-inset-y-3/);
+  });
+});

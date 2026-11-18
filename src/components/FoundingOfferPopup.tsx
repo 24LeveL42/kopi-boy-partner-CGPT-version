@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { FOUNDING_OFFER_COPY } from "@/lib/onboarding-copy";
 import { claimOfferShow, msUntilNextSgMidnight, OFFER_DELAY_MS, offerPhase, type OfferPhase } from "@/lib/founding-offer";
 
@@ -24,6 +25,8 @@ function sessionStore(): Storage | null {
  */
 export function FoundingOfferPopup({ onSignUp }: { onSignUp: () => void }) {
   const [phase, setPhase] = useState<OfferPhase | null>(null);
+  // If the mascot can't load, it's dropped and the top row closes up.
+  const [mascotOk, setMascotOk] = useState(true);
   const dialogRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const open = phase !== null;
@@ -100,31 +103,39 @@ export function FoundingOfferPopup({ onSignUp }: { onSignUp: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="founding-offer-title"
-        className="kb-sheet-up relative flex max-h-[calc(100dvh-8px)] w-full flex-col overflow-hidden rounded-t-[28px] border border-[rgba(124,58,237,0.10)] bg-white text-left shadow-[0_20px_60px_rgba(30,20,60,0.10)] motion-reduce:animate-none sm:max-h-[92dvh] sm:max-w-md sm:rounded-[28px]"
+        className="kb-sheet-up relative w-full text-left motion-reduce:animate-none sm:mt-[84px] sm:max-w-md"
       >
-        {/* Outside the scrolling part, so it is always reachable. */}
+        {mascotOk ? <Mascot onError={() => setMascotOk(false)} /> : null}
+        {/* The card is capped below the screen height by the mascot's overhang, so the mascot is never cut off. */}
+        <div className="relative flex max-h-[calc(100dvh-48px)] flex-col overflow-hidden rounded-t-[28px] border border-[rgba(124,58,237,0.10)] bg-white shadow-[0_20px_60px_rgba(30,20,60,0.10)] sm:max-h-[calc(100dvh-96px)] sm:rounded-[28px]">
+        {/* Outside the scrolling part, so it is always reachable; above the mascot. */}
         <button
           type="button"
           data-autofocus
           aria-label={copy.close}
           onClick={() => close()}
-          className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full text-xl leading-none transition-colors hover:bg-black/5"
+          className="absolute right-3 top-3 z-30 flex h-11 w-11 items-center justify-center rounded-full text-xl leading-none transition-colors hover:bg-black/5"
           style={{ background: "var(--kb-tint)", color: "var(--kb-ink)" }}
         >
           <span aria-hidden="true">×</span>
         </button>
 
         {/* Only this part scrolls, if a short screen needs it; the button stays put. */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5 sm:px-7 sm:pt-7">
-          {phase.kind === "offer" ? (
-            <>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-3 sm:px-7 sm:pt-7">
+          {/* Top row, beside the mascot (which covers the card's top-left corner) and left of the X. */}
+          <div className={`flex min-h-[26px] items-center ${mascotOk ? "pl-[92px] sm:pl-[66px]" : ""}`}>
+            {phase.kind === "offer" ? (
               <p
-                className="inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em]"
+                className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] sm:px-3 sm:text-[11px] sm:tracking-[0.16em]"
                 style={{ background: "rgba(124,58,237,0.08)", color: "var(--kb-purple)" }}
               >
                 {copy.offer.badge}
               </p>
-              <h2 id="founding-offer-title" className="font-display mt-2.5 text-[22px] font-bold leading-tight tracking-tight sm:text-2xl" style={{ color: "var(--kb-ink)" }}>
+            ) : null}
+          </div>
+          {phase.kind === "offer" ? (
+            <>
+              <h2 id="founding-offer-title" className="font-display mt-2 text-[22px] font-bold leading-tight tracking-tight sm:text-2xl" style={{ color: "var(--kb-ink)" }}>
                 {copy.offer.headlineLead}{" "}
                 <span className="inline-block rounded-xl px-2.5 py-0.5 text-white" style={{ background: "var(--kb-gradient)" }}>
                   {copy.offer.headlineChip}
@@ -132,7 +143,7 @@ export function FoundingOfferPopup({ onSignUp }: { onSignUp: () => void }) {
               </h2>
 
               <div
-                className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-2xl border px-4 py-2 sm:mt-3 sm:py-2.5"
+                className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-2xl border px-4 py-1.5 sm:mt-3 sm:py-2.5"
                 style={{ borderColor: "rgba(245,158,11,0.45)", background: "rgba(245,158,11,0.12)" }}
               >
                 <p className="text-sm font-bold" style={{ color: "var(--kb-ink)" }}>
@@ -143,11 +154,11 @@ export function FoundingOfferPopup({ onSignUp }: { onSignUp: () => void }) {
                 </p>
               </div>
 
-              <p className="mt-2.5 rounded-2xl px-4 py-2 text-[13px] leading-5 sm:mt-3 sm:py-2.5 sm:text-sm sm:leading-6" style={{ background: "#F5F3FA", color: "var(--kb-ink)" }}>
+              <p className="mt-2 rounded-2xl px-4 py-1.5 text-[13px] leading-5 sm:mt-3 sm:py-2.5 sm:text-sm sm:leading-6" style={{ background: "#F5F3FA", color: "var(--kb-ink)" }}>
                 {copy.offer.joinEarly}
               </p>
 
-              <ul className="mt-2.5 space-y-1 text-[13px] leading-5 sm:mt-3 sm:space-y-1.5 sm:text-sm" style={{ color: "var(--kb-ink)" }}>
+              <ul className="mt-2 space-y-0.5 text-[13px] leading-5 sm:mt-3 sm:space-y-1.5 sm:text-sm" style={{ color: "var(--kb-ink)" }}>
                 {copy.offer.checks.map((check) => (
                   <li key={check} className="flex items-start gap-2.5">
                     <span
@@ -163,7 +174,7 @@ export function FoundingOfferPopup({ onSignUp }: { onSignUp: () => void }) {
               </ul>
             </>
           ) : (
-            <h2 id="founding-offer-title" className="font-display pr-12 text-xl font-bold leading-snug tracking-tight" style={{ color: "var(--kb-ink)" }}>
+            <h2 id="founding-offer-title" className="font-display mt-2 pr-12 text-xl font-bold leading-snug tracking-tight" style={{ color: "var(--kb-ink)" }}>
               {copy.neutral.headline}
             </h2>
           )}
@@ -172,8 +183,32 @@ export function FoundingOfferPopup({ onSignUp }: { onSignUp: () => void }) {
         </div>
 
         <OfferButtons onSignUp={() => close(onSignUp)} finePrint={phase.kind === "offer" ? copy.offer.finePrint : copy.neutral.finePrint} />
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * K3, decorative. Phone: 96px, top-left, peeking above the sheet. Desktop:
+ * 150px over the card's top-left corner. Positioned absolutely with fixed
+ * width/height, so it never moves anything; loads only when the pop-up
+ * opens; can't take taps or focus (the X sits above it, z-30).
+ */
+function Mascot({ onError }: { onError: () => void }) {
+  return (
+    <Image
+      src="/mascot/k3-thumbs-up.webp"
+      width={360}
+      height={334}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      unoptimized
+      loading="eager"
+      onError={onError}
+      className="pointer-events-none absolute -top-12 left-3 z-20 h-auto w-24 select-none sm:-left-16 sm:-top-[84px] sm:w-[150px]"
+    />
   );
 }
 
@@ -181,7 +216,7 @@ export function FoundingOfferPopup({ onSignUp }: { onSignUp: () => void }) {
 function SetupHelp() {
   const copy = FOUNDING_OFFER_COPY.setupHelp;
   return (
-    <div className="mt-2.5 rounded-2xl border px-3.5 py-2 sm:mt-3 sm:py-2.5" style={{ borderColor: "rgba(16,185,129,0.35)", background: "var(--kb-mint)" }}>
+    <div className="mt-2 rounded-2xl border px-3.5 py-1.5 sm:mt-3 sm:py-2.5" style={{ borderColor: "rgba(16,185,129,0.35)", background: "var(--kb-mint)" }}>
       <p
         className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.1em]"
         style={{ color: "var(--kb-green-deep)" }}
@@ -207,7 +242,7 @@ function WrenchIcon() {
 function OfferButtons({ onSignUp, finePrint }: { onSignUp: () => void; finePrint: string }) {
   const copy = FOUNDING_OFFER_COPY.offer;
   return (
-    <div className="shrink-0 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-7 sm:pb-7">
+    <div className="shrink-0 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 sm:px-7 sm:pb-7 sm:pt-3">
       <button
         type="button"
         onClick={onSignUp}
@@ -218,11 +253,17 @@ function OfferButtons({ onSignUp, finePrint }: { onSignUp: () => void; finePrint
       </button>
       <p className="mt-2 text-center text-[13px] leading-5" style={{ color: "var(--kb-ink-soft)" }}>
         {copy.riderStrip}{" "}
-        <button type="button" onClick={onSignUp} className="font-bold underline underline-offset-2" style={{ color: "var(--kb-purple)" }}>
+        {/* The ::before strip makes the tap area 44px tall without changing the look. */}
+        <button
+          type="button"
+          onClick={onSignUp}
+          className="relative font-bold underline underline-offset-2 before:absolute before:inset-x-0 before:-inset-y-3 before:content-['']"
+          style={{ color: "var(--kb-purple)" }}
+        >
           {copy.riderLink}
         </button>
       </p>
-      <p className="mt-1.5 text-center text-[11px] leading-4" style={{ color: "var(--kb-ink-soft)" }}>
+      <p className="mt-1 text-center text-[11px] leading-4 sm:mt-1.5" style={{ color: "var(--kb-ink-soft)" }}>
         {finePrint}
       </p>
     </div>
