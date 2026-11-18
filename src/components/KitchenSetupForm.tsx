@@ -455,7 +455,7 @@ export function KitchenSetupForm({
     setNotice("We kept the items your deals use. Review your menu, then save again.");
   }
 
-  // Required on every save; never blocks when the saved PayNow didn't load.
+  // Required on every save; if the saved PayNow didn't load, empty or untouched fields keep it.
   function currentPaynowCheck() {
     return kitchenPaynowCheck({ type: paynowType, value: paynowValue, loadFailed: privateLoadFailed, edited: paynowEdited });
   }
@@ -830,7 +830,7 @@ export function KitchenSetupForm({
             </Field>
             {privateLoadFailed && (
               <p className="rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }} role="status">
-                We couldn&apos;t load your PayNow details. Saving keeps them as they are unless you enter new, valid ones here.
+                We couldn&apos;t load your PayNow details. Leave these boxes empty to keep your saved details as they are, or enter new details to replace them.
               </p>
             )}
           </section>

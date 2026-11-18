@@ -120,15 +120,15 @@ export type KitchenPaynowCheck =
  * mobile number, upper case for a UEN) — the Customer app shows a mobile
  * number as "+65 <number>".
  *
- * Safeguard: if the saved PayNow couldn't be loaded (loadFailed), the save is
- * never blocked. Untouched or empty fields keep the saved PayNow, and new
- * details are saved only if they pass the check; otherwise the saved PayNow
- * is kept too.
+ * Safeguard: if the saved PayNow couldn't be loaded (loadFailed), untouched
+ * or empty fields never block the save and keep the saved PayNow as it is.
+ * New details typed in are checked like any other, so the cook is told if
+ * they weren't accepted.
  */
 export function kitchenPaynowCheck(input: { type: PaynowType; value: string; loadFailed: boolean; edited: boolean }): KitchenPaynowCheck {
   const { type, value, loadFailed, edited } = input;
   const problem = type === "mobile" ? paynowProblem(value, "") : paynowProblem("", value);
-  if (loadFailed && (!edited || problem)) return { ok: true, fields: {} };
+  if (loadFailed && (!edited || !value.trim())) return { ok: true, fields: {} };
   if (problem) return { ok: false, message: problem.message };
   const paynow_value = type === "mobile" ? normalizePaynowMobile(value) : normalizePaynowUen(value);
   return { ok: true, fields: { paynow_type: type, paynow_value } };

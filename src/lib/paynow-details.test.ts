@@ -157,8 +157,15 @@ describe("Kitchen Setup save: PayNow required, cleaned up", () => {
       assert.deepEqual(save("uen", "", { loadFailed: true, edited: true }), { ok: true, fields: {} });
     });
 
-    it("never blocks on badly typed new details, and keeps the saved PayNow", () => {
-      assert.deepEqual(save("mobile", "123", { loadFailed: true, edited: true }), { ok: true, fields: {} });
+    it("keeps the saved PayNow when only the method was changed and the box is still empty", () => {
+      assert.deepEqual(save("uen", "   ", { loadFailed: true, edited: true }), { ok: true, fields: {} });
+    });
+
+    it("blocks badly typed new details with the registration message, so the cook knows", () => {
+      const badMobile = save("mobile", "123", { loadFailed: true, edited: true });
+      assert.ok(!badMobile.ok && badMobile.message === paynowProblem("123", "")!.message);
+      const badUen = save("uen", "91234567", { loadFailed: true, edited: true });
+      assert.ok(!badUen.ok && badUen.message === paynowProblem("", "91234567")!.message);
     });
 
     it("saves valid new details, cleaned up", () => {
