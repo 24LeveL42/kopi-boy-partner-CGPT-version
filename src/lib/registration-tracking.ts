@@ -41,6 +41,8 @@ export type RegistrationEventType =
   | "chose_sign_in" // tapped "Sign in — I already have an account"
   | "signin_click" // tapped the Google button (leaving for Google)
   | "signin_error" // code: google_error | auth_failed | google_slow
+  | "email_code_sent" // in-app browsers: a sign-in code was emailed (once per session, resends not counted)
+  | "email_code_error" // code: an EmailCodeErrorCode (src/lib/email-otp.ts)
   | "existing_account" // after sign-in, this account already has an application or is a partner: not a new sign-up
   // Partner sign-up and the cook form (signed in, no application yet).
   | "page_view" // the "Join as a partner" screen (role choice) was shown
@@ -86,7 +88,14 @@ export type ValidationCode =
   // Sign-in screen (signin_error only).
   | "google_error"
   | "auth_failed"
-  | "google_slow";
+  | "google_slow"
+  // Email code sign-in (email_code_error only). Same list as EmailCodeErrorCode in src/lib/email-otp.ts.
+  | "invalid_email"
+  | "no_account"
+  | "rate_limited"
+  | "send_failed"
+  | "code_rejected"
+  | "verify_failed";
 
 export type SigninErrorCode = "google_error" | "auth_failed" | "google_slow";
 

@@ -13,6 +13,13 @@ const docs = (name: string) => readFileSync(new URL(`../../docs/${name}`, import
 const SCHEMA_SQL = docs("supabase-schema.sql");
 const TRACKING_SQL = docs("supabase-registration-tracking.sql");
 const PAYNOW_SQL = docs("supabase-paynow-mobile.sql");
+const EMAIL_CODE_SQL = docs("supabase-email-code-signin.sql");
+// The tracking file as it was before email code sign-in (what the live
+// database has until supabase-email-code-signin.sql runs).
+const TRACKING_SQL_BEFORE_EMAIL = TRACKING_SQL.replaceAll(", 'email_code_sent', 'email_code_error'", "").replace(
+  /,\n\s*'invalid_email', 'no_account', 'rate_limited', 'send_failed', 'code_rejected', 'verify_failed'/g,
+  ""
+);
 
 function between(text: string, start: string, end: string): string {
   const a = text.indexOf(start);
@@ -32,7 +39,7 @@ const APPLICANT = id(2);
 const OLD_APPLICANT = id(3);
 const SESSION = id(100);
 
-async function db(): Promise<PGlite> {
+async function db(trackingSql = TRACKING_SQL): Promise<PGlite> {
   const pg = new PGlite();
   await pg.exec(`
 create role anon;
@@ -57,7 +64,7 @@ insert into public.profiles (id, role) values ('${ADMIN}', 'admin'), ('${APPLICA
 insert into public.cook_applications (user_id, business_name, business_type, description, paynow_uen)
   values ('${OLD_APPLICANT}', 'Old Kitchen', 'Home Cook', 'Nasi lemak', 'whatever they typed');
 `);
-  await pg.exec(TRACKING_SQL);
+  await pg.exec(trackingSql);
   await pg.exec(PAYNOW_SQL);
   return pg;
 }
@@ -210,6 +217,102 @@ describe("docs/supabase-registration-tracking.sql", () => {
     await log(pg, [{ event: "page_view" }]);
     await pg.exec(TRACKING_SQL);
     assert.equal(await count(pg), 1);
+  });
+});
+
+describe("docs/supabase-email-code-signin.sql", () => {
+  const EMAIL_EVENTS = [
+    { event: "email_code_sent" },
+    ...["invalid_email", "no_account", "rate_limited", "send_failed", "code_rejected", "verify_failed"].map((code) => ({ event: "email_code_error", code })),
+  ];
+  const functionOf = (sql: string) => between(sql, "create or replace function public.log_registration_events(", "$$;");
+
+  it("starts from the real previous tracking file", () => {
+    assert.ok(!TRACKING_SQL_BEFORE_EMAIL.includes("email_code"));
+    assert.ok(!TRACKING_SQL_BEFORE_EMAIL.includes("code_rejected"));
+    assert.ok(TRACKING_SQL_BEFORE_EMAIL.includes("'google_slow'\n  )),"));
+  });
+
+  it("before it runs, the app's new events are dropped quietly and the rest of the batch is kept", async () => {
+    const pg = await db(TRACKING_SQL_BEFORE_EMAIL);
+    await log(pg, [{ event: "signin_view" }, ...EMAIL_EVENTS]);
+    assert.equal(await count(pg), 1);
+  });
+
+  it("after it runs, stores the email code events with their codes, keeping existing rows", async () => {
+    const pg = await db(TRACKING_SQL_BEFORE_EMAIL);
+    await log(pg, [{ event: "signin_view" }, { event: "signin_error", code: "google_slow" }]);
+    await pg.exec(EMAIL_CODE_SQL);
+    await pg.exec("begin");
+    await pg.exec("set local role anon");
+    await log(pg, EMAIL_EVENTS);
+    await pg.exec("commit");
+    await pg.exec("reset role");
+    assert.equal(await count(pg), 2 + EMAIL_EVENTS.length);
+    assert.equal(await count(pg, "event_type = 'email_code_error'"), 6);
+  });
+
+  it("still drops values not on the lists (no email address or typed code can be stored)", async () => {
+    const pg = await db(TRACKING_SQL_BEFORE_EMAIL);
+    await pg.exec(EMAIL_CODE_SQL);
+    await log(pg, [
+      { event: "email_code_error", code: "tan@example.com" },
+      { event: "email_code_error", code: "123456" },
+      { event: "email_code_sent", field: "someone@example.com" },
+    ]);
+    assert.equal(await count(pg), 0);
+  });
+
+  it("replaces the old checks even if they had other names, so none is left to reject new events", async () => {
+    const pg = await db(TRACKING_SQL_BEFORE_EMAIL);
+    await pg.exec("alter table public.registration_events rename constraint registration_events_event_type_check to old_events_check");
+    await pg.exec("alter table public.registration_events rename constraint registration_events_error_code_check to old_codes_check");
+    await pg.exec(EMAIL_CODE_SQL);
+    const { rows } = await pg.query<{ conname: string }>(
+      "select conname from pg_constraint where conrelid = 'public.registration_events'::regclass and contype = 'c' order by 1"
+    );
+    assert.deepEqual(rows.map((r) => r.conname), [
+      "registration_events_error_code_check",
+      "registration_events_event_type_check",
+      "registration_events_field_check",
+      "registration_events_form_check",
+      "registration_events_step_check",
+    ]);
+    // A direct insert (as the table owner) proves the table itself accepts them now.
+    await pg.exec(`insert into public.registration_events (session_id, event_type, error_code) values ('${SESSION}', 'email_code_error', 'code_rejected')`);
+    assert.equal(await count(pg), 1);
+  });
+
+  it("keeps the table locked down and the function callable by visitors", async () => {
+    const pg = await db(TRACKING_SQL_BEFORE_EMAIL);
+    await pg.exec(EMAIL_CODE_SQL);
+    await as(pg, "anon", async () => {
+      await assert.rejects(pg.query("select * from public.registration_events"));
+    });
+    await as(pg, APPLICANT, async () => {
+      await log(pg, [{ event: "email_code_sent" }], id(300));
+      assert.equal((await pg.query("select * from public.registration_events")).rows.length, 0);
+    });
+    await pg.exec("begin");
+    await pg.exec("set local role anon");
+    await log(pg, [{ event: "email_code_sent" }]);
+    await pg.exec("commit");
+    await pg.exec("reset role");
+    assert.equal(await count(pg, `session_id = '${SESSION}'`), 1);
+  });
+
+  it("is safe to run twice, and on a fresh install from the updated tracking file", async () => {
+    const pg = await db();
+    await log(pg, [{ event: "email_code_sent" }]);
+    await pg.exec(EMAIL_CODE_SQL);
+    await pg.exec(EMAIL_CODE_SQL);
+    assert.equal(await count(pg), 1);
+    await log(pg, [{ event: "email_code_error", code: "no_account" }]);
+    assert.equal(await count(pg), 2);
+  });
+
+  it("uses exactly the same function as the tracking file", () => {
+    assert.equal(functionOf(EMAIL_CODE_SQL), functionOf(TRACKING_SQL));
   });
 });
 

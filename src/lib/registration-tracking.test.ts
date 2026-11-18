@@ -145,6 +145,28 @@ describe("isTestSession", () => {
   });
 });
 
+describe("kept in sync with docs/supabase-email-code-signin.sql (the live database's update)", () => {
+  const sql = readFileSync(new URL("../../docs/supabase-email-code-signin.sql", import.meta.url), "utf8").replace(/--.*$/gm, "");
+  const src = readFileSync(new URL("./registration-tracking.ts", import.meta.url), "utf8");
+  it("allows every event type and error code, in both the table check and the function", () => {
+    const eventBlock = src.slice(src.indexOf("export type RegistrationEventType"), src.indexOf("export const COOK_FORM_FIELDS"));
+    const codeBlock = src.slice(src.indexOf("export type ValidationCode"), src.indexOf("export interface RegistrationEvent"));
+    const events = [...eventBlock.matchAll(/\| "([a-z_]+)"/g)].map((m) => m[1]);
+    const codes = [...codeBlock.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+    for (const v of [...events, ...codes]) assert.equal(sql.split(`'${v}'`).length - 1, 2, v);
+  });
+  it("covers every email code error the sign-in screen can send", () => {
+    const otp = readFileSync(new URL("./email-otp.ts", import.meta.url), "utf8");
+    const line = otp.match(/export type EmailCodeErrorCode = ([^;]+);/)![1];
+    const errorCodes = [...line.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+    assert.equal(errorCodes.length, 6);
+    for (const c of errorCodes) {
+      assert.ok(src.includes(`| "${c}"`), `${c} missing from ValidationCode`);
+      assert.equal(sql.split(`'${c}'`).length - 1, 2, c);
+    }
+  });
+});
+
 describe("kept in sync with docs/supabase-registration-tracking.sql", () => {
   // Code only: comments may mention a value without allowing it.
   const sql = readFileSync(new URL("../../docs/supabase-registration-tracking.sql", import.meta.url), "utf8").replace(/--.*$/gm, "");
@@ -157,7 +179,7 @@ describe("kept in sync with docs/supabase-registration-tracking.sql", () => {
     const src = readFileSync(new URL("./registration-tracking.ts", import.meta.url), "utf8");
     const block = src.slice(src.indexOf("export type RegistrationEventType"), src.indexOf("export const COOK_FORM_FIELDS"));
     const events = [...block.matchAll(/\| "([a-z_]+)"/g)].map((m) => m[1]);
-    assert.equal(events.length, 16);
+    assert.equal(events.length, 18);
     for (const e of events) assert.equal(sql.split(`'${e}'`).length - 1, 2, e);
   });
   it("allows every error code the app sends", () => {

@@ -64,7 +64,7 @@ create table if not exists public.registration_events (
   -- Same list as RegistrationEventType in src/lib/registration-tracking.ts.
   event_type text not null check (event_type in (
     'signin_view', 'in_app_browser', 'chose_sign_up', 'chose_sign_in', 'signin_click',
-    'signin_error', 'existing_account',
+    'signin_error', 'existing_account', 'email_code_sent', 'email_code_error',
     'page_view', 'cook_form_view', 'rider_form_view', 'form_start', 'field_reached',
     'submit_attempt', 'validation_error', 'submit_success', 'abandon'
   )),
@@ -78,7 +78,8 @@ create table if not exists public.registration_events (
   error_code text not null default '' check (error_code in (
     '', 'required', 'invalid_format', 'invalid_postal_code', 'invalid_business_uen',
     'paynow_missing', 'invalid_mobile', 'invalid_uen', 'privacy_required', 'server_error',
-    'google_error', 'auth_failed', 'google_slow'
+    'google_error', 'auth_failed', 'google_slow',
+    'invalid_email', 'no_account', 'rate_limited', 'send_failed', 'code_rejected', 'verify_failed'
   )),
   is_test boolean not null default false,
   created_at timestamptz not null default now()
@@ -150,7 +151,7 @@ begin
    where jsonb_typeof(e) = 'object'
      and (e ->> 'event') in (
        'signin_view', 'in_app_browser', 'chose_sign_up', 'chose_sign_in', 'signin_click',
-       'signin_error', 'existing_account',
+       'signin_error', 'existing_account', 'email_code_sent', 'email_code_error',
        'page_view', 'cook_form_view', 'rider_form_view', 'form_start', 'field_reached',
        'submit_attempt', 'validation_error', 'submit_success', 'abandon')
      and coalesce(e ->> 'field', '') in (
@@ -159,7 +160,8 @@ begin
      and coalesce(e ->> 'code', '') in (
        '', 'required', 'invalid_format', 'invalid_postal_code', 'invalid_business_uen',
        'paynow_missing', 'invalid_mobile', 'invalid_uen', 'privacy_required', 'server_error',
-       'google_error', 'auth_failed', 'google_slow')
+       'google_error', 'auth_failed', 'google_slow',
+       'invalid_email', 'no_account', 'rate_limited', 'send_failed', 'code_rejected', 'verify_failed')
   on conflict do nothing;
 end;
 $$;

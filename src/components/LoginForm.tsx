@@ -8,12 +8,16 @@ import { isInAppBrowser } from "@/lib/in-app-browser";
 import { copyText, legacyCopy } from "@/lib/copy-link";
 import { createBrowserTracker, markSigninTracked, type RegistrationTracker } from "@/lib/registration-tracking";
 import { GOOGLE_SLOW_MESSAGE, GOOGLE_WAIT_MS, IN_APP_BROWSER_COPY } from "@/lib/onboarding-copy";
+import { EMAIL_CODE_COPY } from "@/lib/email-otp";
 import { useBackHandler } from "./AppChrome";
+import { EmailCodeSignIn } from "./EmailCodeSignIn";
 import { Logo } from "./Logo";
 import { PendingLabel } from "./Pending";
 
-// Google is the only sign-in method (phone/SMS codes were removed).
-type Step = "choice" | "google";
+// Google, plus an email code inside in-app browsers (where Google refuses
+// to sign in): "email" and "code" are only reached from there. Phone/SMS
+// codes were removed.
+type Step = "choice" | "google" | "email" | "code";
 type Intent = "signup" | "signin";
 
 // The user agent never changes, so there is nothing to subscribe to; the
@@ -85,18 +89,20 @@ export function LoginForm({
   }
 
   useBackHandler(
-    step === "google"
-      ? () => {
-          setStep("choice");
+    step === "choice"
+      ? null
+      : () => {
+          setStep(step === "code" ? "email" : step === "email" ? "google" : "choice");
           setError(null);
-        }
-      : null,
+        },
   );
 
   function chooseIntent(next: Intent) {
     setError(null);
     setIntent(next);
-    setStep("google");
+    // Switching Sign in / Sign up on the email steps stays there (e.g. after
+    // "No account with this email. Tap Sign up instead.").
+    setStep((current) => (current === "email" || current === "code" ? current : "google"));
     trackerRef.current?.track({ event: next === "signup" ? "chose_sign_up" : "chose_sign_in" });
   }
 
@@ -341,9 +347,43 @@ export function LoginForm({
                 >
                   {intent === "signup"
                     ? "New to Kopi Boy? Join the partner network."
-                    : "Sign in with Google."}
+                    : inAppBrowser
+                      ? "Continue with email, or sign in with Google."
+                      : "Sign in with Google."}
                 </p>
               </div>
+
+              {step === "email" || step === "code" ? (
+                <EmailCodeSignIn
+                  supabase={supabase}
+                  intent={intent}
+                  next={next}
+                  stage={step}
+                  onStageChange={setStep}
+                  track={(e) => trackerRef.current?.track(e)}
+                  flush={() => trackerRef.current?.flush(true)}
+                />
+              ) : (
+              <>
+              {/* In-app browsers: email first, Google still offered below. */}
+              {inAppBrowser && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setStep("email");
+                    }}
+                    disabled={busy}
+                    className="kb-btn-primary w-full py-3.5 text-[15px]"
+                  >
+                    {EMAIL_CODE_COPY.continueWithEmail}
+                  </button>
+                  <p className="my-3 text-center text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: "var(--kb-ink-soft)" }}>
+                    {EMAIL_CODE_COPY.orGoogle}
+                  </p>
+                </>
+              )}
 
               {/* Google */}
               <button
@@ -366,6 +406,8 @@ export function LoginForm({
                     : "Sign in with Google"}
                 </PendingLabel>
               </button>
+              </>
+              )}
             </>
           )}
 

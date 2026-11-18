@@ -23,7 +23,13 @@ Optional:
 ## Current status: Feature #003 — Auth + roles done, cook kitchen/menu setup done
 
 - Design system shared with Customer/HQ (`src/app/globals.css`)
-- **Real auth**: phone OTP (Vonage) + Google Sign-In, `/login`
+- **Real auth**: Google Sign-In, `/login`. Inside in-app browsers
+  (Facebook, Instagram, TikTok…), where Google refuses to sign in, the
+  screen leads with an email code (`src/components/EmailCodeSignIn.tsx`,
+  `src/lib/email-otp.ts`): Supabase emails a code via Resend, typed back
+  into the same screen. Supabase setup: both the "Confirm sign up" and
+  "Magic link or OTP" templates must show `{{ .Token }}`. Funnel events
+  need `docs/supabase-email-code-signin.sql`.
 - **Real application flow**: `/` gates on Supabase — sign in → apply
   (cook or rider) → pending/rejected status screen → once HQ approves,
   cooks are routed into kitchen setup, riders straight into the shell
