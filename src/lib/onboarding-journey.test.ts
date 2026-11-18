@@ -121,7 +121,7 @@ describe("journey wording", () => {
     assert.equal(o.deadline, "Join before 22 Dec 2026");
     assert.equal(
       o.joinEarly,
-      "Join early and set up your kitchen now, so you're ready to take orders on launch day, 22 Dec. Your 3 free months run from 22 Dec 2026 to 22 Mar 2027. We'll set up your kitchen for you, free.",
+      "Join early and set up your kitchen now, so you're ready to take orders on launch day, 22 Dec. Your 3 free months run from 22 Dec 2026 to 22 Mar 2027.",
     );
     assert.deepEqual(o.checks, [
       "Registration is free",
@@ -132,6 +132,16 @@ describe("journey wording", () => {
     assert.equal(o.cookButton, "Sign up as a cook, it's free");
     assert.equal(`${o.riderStrip} ${o.riderLink}`, "Riders: free to join, free to use. Join as a rider →");
     assert.equal(o.finePrint, "Offer for kitchens registering before 22 Dec 2026. After the free period: S$29.95/month, cancel anytime.");
+  });
+
+  it("kitchen setup help: optional, said once, the same in both versions", () => {
+    assert.deepEqual(FOUNDING_OFFER_COPY.setupHelp, {
+      badge: "FREE KITCHEN SETUP HELP · OPTIONAL",
+      line: "Need a hand? We'll set up your kitchen for you, free. Totally your choice.",
+    });
+    // Not repeated in the join-early paragraph (or anywhere else in the offer).
+    assert.doesNotMatch(JSON.stringify(FOUNDING_OFFER_COPY.offer), /set up your kitchen for you/);
+    assert.doesNotMatch(neutralText, /set up your kitchen for you/);
   });
 
   it("neutral version keeps the buttons and the S$29.95/month fine print", () => {

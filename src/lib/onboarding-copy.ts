@@ -121,12 +121,17 @@ const OFFER_BUTTONS = {
  */
 export const FOUNDING_OFFER_COPY = {
   close: "Close",
+  /** After the checks, before the button, in both versions. */
+  setupHelp: {
+    badge: "FREE KITCHEN SETUP HELP · OPTIONAL",
+    line: "Need a hand? We'll set up your kitchen for you, free. Totally your choice.",
+  },
   offer: {
     badge: "FOUNDING PARTNER OFFER",
     headlineLead: "Cooks:",
     headlineChip: `${FREE_MONTHS_WORDS.toUpperCase()} FREE`,
     deadline: `Join before ${LAUNCH_LONG}`,
-    joinEarly: `Join early and set up your kitchen now, so you're ready to take orders on launch day, ${LAUNCH_SHORT}. Your ${FOUNDING_FREE_MONTHS} free months run from ${LAUNCH_LONG} to ${FREE_UNTIL}. We'll set up your kitchen for you, free.`,
+    joinEarly: `Join early and set up your kitchen now, so you're ready to take orders on launch day, ${LAUNCH_SHORT}. Your ${FOUNDING_FREE_MONTHS} free months run from ${LAUNCH_LONG} to ${FREE_UNTIL}.`,
     checks: [
       "Registration is free",
       "0% commission. You keep 100% of what customers pay you",
