@@ -2,11 +2,15 @@
  * Words for the sign-up journey screens: application received, the HQ
  * (admin) account screen, "almost there", load errors and /welcome.
  * Pricing is "0% commission" and "S$29.95/month subscription" only, never
- * GST, tax or a free month (checked in onboarding-copy.test.ts).
+ * GST or tax. Free months appear only in the founding-partner offer pop-up
+ * (FOUNDING_OFFER_COPY) before launch (checked in onboarding-journey.test.ts).
  */
 
+/** The cook subscription after any free period. */
+export const COOK_MONTHLY_PRICE = "S$29.95";
+
 /** Shown to cooks only. */
-export const COOK_PRICING_LINE = "0% commission. S$29.95/month subscription.";
+export const COOK_PRICING_LINE = `0% commission. ${COOK_MONTHLY_PRICE}/month subscription.`;
 
 export const PENDING_COPY = {
   title: "Application received",
@@ -75,3 +79,69 @@ export const IN_APP_BROWSER_COPY = {
 /** The Google button gives up waiting after this long (or when the user comes Back). */
 export const GOOGLE_WAIT_MS = 20_000;
 export const GOOGLE_SLOW_MESSAGE = "Still waiting for Google. Please try again.";
+
+/**
+ * Launch day, and the switch for the offer pop-up: before this instant it
+ * shows the founding-partner offer, from it the neutral version. The only
+ * place the date lives; every date below is worked out from it.
+ */
+export const FOUNDING_OFFER_ENDS_AT = "2026-12-22T00:00:00+08:00";
+
+/** Length of the founding partners' free period, from launch day. */
+export const FOUNDING_FREE_MONTHS = 3;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** The launch date's Singapore calendar day, months later (no day overflow: the 22nd always exists). */
+function launchDay(monthsLater = 0) {
+  const [y, m, d] = FOUNDING_OFFER_ENDS_AT.slice(0, 10).split("-").map(Number);
+  const total = m - 1 + monthsLater;
+  return { year: y + Math.floor(total / 12), month: total % 12, day: d };
+}
+const shortDate = ({ day, month }: { day: number; month: number }) => `${day} ${MONTHS[month]}`;
+const longDate = (d: { day: number; month: number; year: number }) => `${shortDate(d)} ${d.year}`;
+
+const LAUNCH_LONG = longDate(launchDay()); // "22 Dec 2026"
+const LAUNCH_SHORT = shortDate(launchDay()); // "22 Dec"
+const FREE_UNTIL = longDate(launchDay(FOUNDING_FREE_MONTHS)); // "22 Mar 2027"
+const FREE_MONTHS_WORDS = `${FOUNDING_FREE_MONTHS} months`;
+
+/** Same two buttons in both versions. */
+const OFFER_BUTTONS = {
+  cookButton: "Sign up as a cook, it's free",
+  riderStrip: "Riders: free to join, free to use.",
+  riderLink: "Join as a rider →",
+} as const;
+
+/**
+ * The offer pop-up on the signed-out landing page (FoundingOfferPopup).
+ * No cap wording (limited spots, first 100…), and nothing suggesting that
+ * joining earlier gives more free months: everyone's free months run from
+ * launch day.
+ */
+export const FOUNDING_OFFER_COPY = {
+  close: "Close",
+  offer: {
+    badge: "FOUNDING PARTNER OFFER",
+    headlineLead: "Cooks:",
+    headlineChip: `${FREE_MONTHS_WORDS.toUpperCase()} FREE`,
+    deadline: `Join before ${LAUNCH_LONG}`,
+    joinEarly: `Join early and set up your kitchen now, so you're ready to take orders on launch day, ${LAUNCH_SHORT}. Your ${FOUNDING_FREE_MONTHS} free months run from ${LAUNCH_LONG} to ${FREE_UNTIL}. We'll set up your kitchen for you, free.`,
+    checks: [
+      "Registration is free",
+      "0% commission. You keep 100% of what customers pay you",
+      "No credit or debit card needed",
+      `No lock-in. Don't want to continue after ${FREE_MONTHS_WORDS}? Just stop`,
+    ],
+    ...OFFER_BUTTONS,
+    finePrint: `Offer for kitchens registering before ${LAUNCH_LONG}. After the free period: ${COOK_MONTHLY_PRICE}/month, cancel anytime.`,
+  },
+  neutral: {
+    headline: "Registration is free. 0% commission. Riders always free.",
+    ...OFFER_BUTTONS,
+    finePrint: `Cooks: ${COOK_MONTHLY_PRICE}/month, cancel anytime.`,
+  },
+  /** The countdown beside the deadline. */
+  daysLeft: (n: number) => (n === 1 ? "1 day left" : `${n} days left`),
+  lastDay: "Last day to join",
+} as const;

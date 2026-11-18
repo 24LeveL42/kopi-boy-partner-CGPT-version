@@ -34,7 +34,8 @@ export default async function Home() {
 
   const user = auth.user;
   if (!user) {
-    return <LoginForm />;
+    // Signed-out landing page: the only place the offer pop-up appears.
+    return <LoginForm showOffer />;
   }
 
   // Profile, latest applications and kitchen, with a time limit and one

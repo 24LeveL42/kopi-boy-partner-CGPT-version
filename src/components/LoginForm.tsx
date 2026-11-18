@@ -11,6 +11,7 @@ import { GOOGLE_SLOW_MESSAGE, GOOGLE_WAIT_MS, IN_APP_BROWSER_COPY } from "@/lib/
 import { EMAIL_CODE_COPY } from "@/lib/email-otp";
 import { useBackHandler } from "./AppChrome";
 import { EmailCodeSignIn } from "./EmailCodeSignIn";
+import { FoundingOfferPopup } from "./FoundingOfferPopup";
 import { Logo } from "./Logo";
 import { PendingLabel } from "./Pending";
 
@@ -47,10 +48,13 @@ function waitForGoogleRedirect(): Promise<"returned" | "timeout"> {
 export function LoginForm({
   initialError = null,
   next = "/",
+  showOffer = false,
 }: {
   initialError?: string | null;
   /** Where to land after signing in (safe relative path, e.g. "/welcome"). */
   next?: string;
+  /** The founding-partner offer pop-up: the signed-out landing page (/) only, never /login. */
+  showOffer?: boolean;
 }) {
   const [step, setStep] = useState<Step>("choice");
   const [intent, setIntent] = useState<Intent>("signin");
@@ -436,6 +440,9 @@ export function LoginForm({
           </p>
         </div>
       </div>
+
+      {/* Its Sign up buttons take the same path as the Sign up button above. */}
+      {showOffer ? <FoundingOfferPopup onSignUp={() => chooseIntent("signup")} /> : null}
     </main>
   );
 }
