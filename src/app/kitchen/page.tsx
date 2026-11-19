@@ -45,6 +45,8 @@ async function readKitchenPage(supabase: SupabaseClient, userId: string, signal:
       .from("menu_items")
       .select("*")
       .eq("kitchen_id", userId)
+      // HQ-hidden dishes are never shown to the cook, so the form can't save over or delete them.
+      .eq("is_hidden", false)
       .order("created_at", { ascending: true })
       .abortSignal(signal)
       .returns<MenuItem[]>(),

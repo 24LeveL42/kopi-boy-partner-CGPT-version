@@ -51,4 +51,10 @@ export interface MenuItem {
   name: string;
   price: number;
   photo_url: string | null;
+  /**
+   * Set by HQ to take a dish off the menu. The Partner app reads and saves
+   * only visible dishes (is_hidden = false) and never writes this column
+   * except false on a new dish.
+   */
+  is_hidden: boolean;
 }

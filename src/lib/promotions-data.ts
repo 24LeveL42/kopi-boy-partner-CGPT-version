@@ -33,7 +33,14 @@ export interface DealContext {
 
 export async function loadDealContext(supabase: SupabaseClient, userId: string): Promise<DealContext> {
   const [{ data: menu }, { data: settings, error: settingsError }, { data: ban }] = await Promise.all([
-    supabase.from("menu_items").select("id, name, price").eq("kitchen_id", userId).order("created_at", { ascending: true }).returns<DealMenuItem[]>(),
+    // Visible dishes only: an HQ-hidden dish can't be picked for a deal (validatePromotion rejects ids not in this list).
+    supabase
+      .from("menu_items")
+      .select("id, name, price")
+      .eq("kitchen_id", userId)
+      .eq("is_hidden", false)
+      .order("created_at", { ascending: true })
+      .returns<DealMenuItem[]>(),
     supabase
       .from("app_settings")
       .select("deals_enabled, max_percent_off, max_deal_days")

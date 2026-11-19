@@ -362,3 +362,27 @@ describe("describePromotionError", () => {
     assert.equal(describePromotionError({ code: "42501", message: "permission denied for table promotions" }), DEALS_NOT_READY_MESSAGE);
   });
 });
+
+// HQ can hide a dish (menu_items.is_hidden). loadDealContext reads visible
+// dishes only, so a hidden dish isn't in `menu` and can't be picked.
+describe("HQ-hidden dishes can't be picked for a deal", () => {
+  it("loadDealContext reads menu_items with is_hidden = false", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(new URL("./promotions-data.ts", import.meta.url), "utf8").replace(/\s+/g, " ");
+    const read = src.match(/\.from\("menu_items"\)[^;]*?\.returns<DealMenuItem\[\]>\(\)/)?.[0] ?? "";
+    assert.match(read, /\.eq\("kitchen_id", userId\) \.eq\("is_hidden", false\)/);
+    assert.equal(src.match(/\.from\("menu_items"\)/g)?.length, 1);
+  });
+
+  it("a hidden dish (not in the visible menu) is refused as a chosen item", () => {
+    const r = validate(draft({ itemIds: ["rice", "hidden-dish"] }));
+    assert.equal(r.value, null);
+    assert.match(r.errors.itemIds ?? "", /isn't on your menu any more/);
+  });
+
+  it("a hidden dish is refused as the free item", () => {
+    const r = validate(draft({ kind: "free_item", percentOff: "", freeItemId: "hidden-dish" }));
+    assert.equal(r.value, null);
+    assert.match(r.errors.freeItemId ?? "", /isn't on your menu any more/);
+  });
+});

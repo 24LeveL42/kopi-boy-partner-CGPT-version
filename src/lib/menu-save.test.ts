@@ -195,3 +195,66 @@ describe("firstRowNeedingFix", () => {
     assert.equal(firstRowNeedingFix([{ key: "z", id: "gone", hasAddons: false }], new Set(), SAVED), -1);
   });
 });
+
+// HQ can hide a dish (menu_items.is_hidden). The cook's pages load only
+// visible dishes, so the save plan is built from those alone.
+describe("HQ-hidden dishes are never touched by the cook's save", () => {
+  const visible: SavedMenuItem[] = [
+    { id: "a", name: "Chicken Rice", price: 5, photo_url: null },
+    { id: "b", name: "Laksa", price: 6, photo_url: null },
+  ];
+
+  it("deletes and updates only dishes that were loaded (visible)", () => {
+    const plan = planMenuSave(visible, [{ id: "a", name: "Chicken Rice", price: 5.5, photo_url: "" }]);
+    assert.deepEqual(plan.deleteIds, ["b"]);
+    assert.deepEqual(plan.updates.map((u) => u.id), ["a"]);
+  });
+
+  it("a hidden dish's id (not loaded) is never updated or deleted, only ever inserted as a new row", () => {
+    const plan = planMenuSave(visible, [
+      { id: "a", name: "Chicken Rice", price: 5, photo_url: "" },
+      { id: "b", name: "Laksa", price: 6, photo_url: "" },
+      { id: "hidden-1", name: "Old dish", price: 4, photo_url: "" },
+    ]);
+    assert.ok(!plan.updates.some((u) => u.id === "hidden-1"));
+    assert.ok(!plan.deleteIds.includes("hidden-1"));
+    assert.equal(plan.inserts.length, 1);
+  });
+
+  it("never writes is_hidden in an update", () => {
+    const plan = planMenuSave(visible, [{ id: "a", name: "Nasi Lemak", price: 5, photo_url: "" }]);
+    for (const u of plan.updates) assert.ok(!("is_hidden" in u));
+  });
+});
+
+describe("Kitchen page and Kitchen Setup: visible dishes only (source)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const page = readFileSync(new URL("../app/kitchen/page.tsx", import.meta.url), "utf8");
+  const form = readFileSync(new URL("../components/KitchenSetupForm.tsx", import.meta.url), "utf8");
+  const flat = (s: string) => s.replace(/\s+/g, " ");
+
+  it("the kitchen page reads menu_items with is_hidden = false", () => {
+    const read = flat(page).match(/\.from\("menu_items"\)[^;]*?\.returns<MenuItem\[\]>\(\)/)?.[0] ?? "";
+    assert.match(read, /\.eq\("is_hidden", false\)/);
+  });
+
+  it("those are the only menu_items reads: one on the kitchen page, none of its own in Kitchen Setup", () => {
+    assert.equal(flat(page).match(/\.from\("menu_items"\)/g)?.length, 1);
+    // Kitchen Setup's only .select() on menu_items is the insert's RETURNING.
+    assert.doesNotMatch(flat(form), /\.from\("menu_items"\)\s*\.select\(/);
+  });
+
+  it("Kitchen Setup's update and delete are limited to visible dishes", () => {
+    const f = flat(form);
+    assert.match(f, /\.from\("menu_items"\)\.update\(fields\)\.eq\("id", id\)\.eq\("kitchen_id", userId\)\.eq\("is_hidden", false\)/);
+    assert.match(f, /\.from\("menu_items"\) \.delete\(\) \.in\("id", plan\.deleteIds\) \.eq\("kitchen_id", userId\) \.eq\("is_hidden", false\)/);
+    assert.equal(f.match(/\.from\("menu_items"\)\s*\.delete\(\)/g)?.length, 1);
+    assert.equal(f.match(/\.from\("menu_items"\)\s*\.update\(/g)?.length, 1);
+  });
+
+  it("new dishes are saved visible; is_hidden is never set to true or upserted", () => {
+    assert.match(flat(form), /is_hidden: false \}\)\)\)/);
+    assert.doesNotMatch(form, /is_hidden:\s*true/);
+    assert.doesNotMatch(flat(form), /\.from\("menu_items"\)\s*\.upsert/);
+  });
+});

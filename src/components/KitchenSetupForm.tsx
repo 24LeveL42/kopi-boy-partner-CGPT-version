@@ -524,8 +524,13 @@ export function KitchenSetupForm({
     // them): update changed rows, insert new ones, and delete only the rows
     // the cook removed, last, so a save that fails part-way leaves extra
     // rows behind, never an empty menu.
+    // Only visible dishes are loaded, and every write is limited to
+    // is_hidden = false too, so a dish HQ hides while the cook is editing
+    // is never overwritten or deleted. is_hidden itself is never updated.
     const updateResults = await Promise.all(
-      plan.updates.map(({ id, ...fields }) => supabase.from("menu_items").update(fields).eq("id", id).eq("kitchen_id", userId))
+      plan.updates.map(({ id, ...fields }) =>
+        supabase.from("menu_items").update(fields).eq("id", id).eq("kitchen_id", userId).eq("is_hidden", false)
+      )
     );
     const updateError = updateResults.find((r) => r.error)?.error;
     if (updateError) throw updateError;
@@ -536,7 +541,7 @@ export function KitchenSetupForm({
     if (plan.inserts.length > 0) {
       const { data: inserted, error: itemsError } = await supabase
         .from("menu_items")
-        .insert(plan.inserts.map(({ name, price, photo_url }) => ({ kitchen_id: userId, name, price, photo_url })))
+        .insert(plan.inserts.map(({ name, price, photo_url }) => ({ kitchen_id: userId, name, price, photo_url, is_hidden: false })))
         .select("id, name, price, photo_url");
       if (itemsError) throw itemsError;
       // Remember the new rows (and give their form rows the ids), so if a
@@ -548,7 +553,12 @@ export function KitchenSetupForm({
     }
 
     if (plan.deleteIds.length > 0) {
-      const { error: deleteError } = await supabase.from("menu_items").delete().in("id", plan.deleteIds).eq("kitchen_id", userId);
+      const { error: deleteError } = await supabase
+        .from("menu_items")
+        .delete()
+        .in("id", plan.deleteIds)
+        .eq("kitchen_id", userId)
+        .eq("is_hidden", false);
       if (deleteError) throw deleteError;
       savedItems.current = withoutDeleted(savedItems.current, plan.deleteIds);
     }
