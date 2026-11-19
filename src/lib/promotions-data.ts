@@ -58,6 +58,25 @@ export async function loadDealContext(supabase: SupabaseClient, userId: string):
   };
 }
 
+/**
+ * Names for the deal's dishes that HQ has hidden (they're left out of
+ * loadDealContext's menu), so the edit form can list them to untick.
+ * Only these ids, only this kitchen's, only hidden ones. A failed read gives
+ * [] and the form shows a generic name; what can be saved doesn't change.
+ */
+export async function loadHiddenDealDishes(supabase: SupabaseClient, userId: string, ids: string[]): Promise<DealMenuItem[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("menu_items")
+    .select("id, name, price")
+    .eq("kitchen_id", userId)
+    .eq("is_hidden", true)
+    .in("id", ids)
+    .returns<DealMenuItem[]>();
+  if (error) console.error("Promotions: couldn't read hidden dishes", error);
+  return (data ?? []).map((m) => ({ ...m, price: Number(m.price) }));
+}
+
 function normalise(row: PromotionRow, orderCount: number): PromotionWithUsage {
   const { promotion_items, ...p } = row;
   const num = (v: number | null) => (v == null ? null : Number(v));

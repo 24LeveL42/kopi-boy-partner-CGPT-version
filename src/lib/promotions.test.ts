@@ -2,9 +2,13 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEALS_NOT_READY_MESSAGE,
+  DEAL_DISHES_ALL_HIDDEN,
+  DEAL_DISH_HIDDEN_TICKED,
+  HIDDEN_DISH_LABEL,
   canDelete,
   canStop,
   canSwitchOn,
+  dealDishesAllHidden,
   describePromotionError,
   draftFromPromotion,
   editLocks,
@@ -13,6 +17,7 @@ import {
   formatDuration,
   fromSgtInput,
   groupPromotions,
+  hiddenDealItemIds,
   isLocked,
   limitLabel,
   previewDeal,
@@ -20,6 +25,7 @@ import {
   promotionWarnings,
   quickEndAt,
   toSgtInput,
+  toggleDealItem,
   validatePromotion,
   type DealMenuItem,
   type DealSettings,
@@ -371,18 +377,128 @@ describe("HQ-hidden dishes can't be picked for a deal", () => {
     const src = readFileSync(new URL("./promotions-data.ts", import.meta.url), "utf8").replace(/\s+/g, " ");
     const read = src.match(/\.from\("menu_items"\)[^;]*?\.returns<DealMenuItem\[\]>\(\)/)?.[0] ?? "";
     assert.match(read, /\.eq\("kitchen_id", userId\) \.eq\("is_hidden", false\)/);
-    assert.equal(src.match(/\.from\("menu_items"\)/g)?.length, 1);
+    // The only other menu_items read is loadHiddenDealDishes (names for the edit form).
+    assert.equal(src.match(/\.from\("menu_items"\)/g)?.length, 2);
   });
 
   it("a hidden dish (not in the visible menu) is refused as a chosen item", () => {
     const r = validate(draft({ itemIds: ["rice", "hidden-dish"] }));
     assert.equal(r.value, null);
-    assert.match(r.errors.itemIds ?? "", /isn't on your menu any more/);
+    assert.equal(r.errors.itemIds, DEAL_DISH_HIDDEN_TICKED);
   });
 
   it("a hidden dish is refused as the free item", () => {
     const r = validate(draft({ kind: "free_item", percentOff: "", freeItemId: "hidden-dish" }));
     assert.equal(r.value, null);
     assert.match(r.errors.freeItemId ?? "", /isn't on your menu any more/);
+  });
+});
+
+// Editing a deal whose dishes HQ has since hidden. MENU (visible) has rice,
+// noodle and tea; h1 and h2 are hidden dishes of this kitchen.
+describe("deal edit: dishes hidden by HQ", () => {
+  const allHidden = promotion({ item_ids: ["h1", "h2"] });
+  const someHidden = promotion({ item_ids: ["rice", "h1"] });
+  const editDraft = (p: PromotionWithUsage, itemIds: string[]) => ({ ...draftFromPromotion(p, p.item_ids), itemIds });
+  const check = (p: PromotionWithUsage, itemIds: string[]) => validate(editDraft(p, itemIds), p);
+
+  it("lists the deal's dishes that aren't on the visible menu, in order", () => {
+    assert.deepEqual(hiddenDealItemIds(someHidden, MENU), ["h1"]);
+    assert.deepEqual(hiddenDealItemIds(allHidden, MENU), ["h1", "h2"]);
+    assert.deepEqual(hiddenDealItemIds(promotion({ item_ids: ["rice"] }), MENU), []);
+    assert.deepEqual(hiddenDealItemIds(undefined, MENU), []);
+  });
+
+  it("a hidden dish can be unticked but never ticked again; no other hidden dish can be ticked", () => {
+    assert.deepEqual(toggleDealItem(["rice", "h1"], "h1", MENU), ["rice"]);
+    assert.deepEqual(toggleDealItem(["rice"], "h1", MENU), ["rice"]);
+    assert.deepEqual(toggleDealItem(["rice"], "h9", MENU), ["rice"]);
+    assert.deepEqual(toggleDealItem(["rice"], "noodle", MENU), ["rice", "noodle"]);
+    assert.deepEqual(toggleDealItem(["rice", "noodle"], "rice", MENU), ["noodle"]);
+  });
+
+  it("all dishes hidden: blocked with a clear message, whatever is left ticked", () => {
+    for (const ticked of [["h1", "h2"], ["h1"], []]) {
+      const r = check(allHidden, ticked);
+      assert.equal(r.value, null, `ticked ${JSON.stringify(ticked)}`);
+      assert.equal(r.errors.itemIds, DEAL_DISHES_ALL_HIDDEN);
+    }
+    assert.match(DEAL_DISHES_ALL_HIDDEN, /Tick at least one dish from your menu/);
+    assert.match(DEAL_DISHES_ALL_HIDDEN, /stop this deal/);
+  });
+
+  it("all dishes hidden, every hidden one unticked: never quietly becomes a whole-menu deal", () => {
+    const r = check(allHidden, []);
+    assert.equal(r.value, null);
+    assert.equal(dealDishesAllHidden(allHidden, MENU, []), true);
+  });
+
+  it("all dishes hidden: a visible dish ticked, hidden ones still ticked, asks to untick them", () => {
+    const r = check(allHidden, ["rice", "h1"]);
+    assert.equal(r.value, null);
+    assert.equal(r.errors.itemIds, DEAL_DISH_HIDDEN_TICKED);
+    assert.match(DEAL_DISH_HIDDEN_TICKED, new RegExp(HIDDEN_DISH_LABEL));
+  });
+
+  it("all dishes hidden: saves once a visible dish is chosen and the hidden ones are unticked", () => {
+    const r = check(allHidden, ["rice"]);
+    assert.equal(r.errors.itemIds, undefined);
+    assert.ok(r.value);
+    assert.deepEqual(r.itemIds, ["rice"]);
+  });
+
+  it("some dishes hidden: untick the hidden one and it saves with the visible ones", () => {
+    assert.equal(check(someHidden, ["rice", "h1"]).errors.itemIds, DEAL_DISH_HIDDEN_TICKED);
+    const r = check(someHidden, ["rice"]);
+    assert.ok(r.value);
+    assert.deepEqual(r.itemIds, ["rice"]);
+    assert.equal(dealDishesAllHidden(someHidden, MENU, []), false);
+  });
+
+  it("deals with no hidden dishes, and whole-menu deals, are unaffected", () => {
+    assert.equal(dealDishesAllHidden(promotion({ item_ids: [] }), MENU, []), false);
+    assert.ok(check(promotion({ item_ids: [] }), []).value);
+    assert.ok(check(promotion({ item_ids: ["rice", "tea"] }), ["tea"]).value);
+  });
+
+  it("hidden dishes are never sent to the save", () => {
+    for (const ticked of [["h1"], ["rice", "h1"], ["h1", "h2"]]) {
+      const r = check(allHidden, ticked);
+      assert.equal(r.value, null);
+    }
+  });
+});
+
+describe("deal edit form and page: hidden dish rows (source)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const flat = (u: string) => readFileSync(new URL(u, import.meta.url), "utf8").replace(/\s+/g, " ");
+  const form = flat("../components/PromotionForm.tsx");
+  const page = flat("../app/promotions/[id]/page.tsx");
+  const data = flat("./promotions-data.ts");
+
+  it("hidden rows: labelled, checkbox disabled once unticked, toggled through toggleDealItem", () => {
+    assert.match(form, /data-hidden-dish/);
+    assert.match(form, /checked=\{ticked\} disabled=\{!ticked\}/);
+    assert.match(form, /\{HIDDEN_DISH_LABEL\}/);
+    assert.match(form, /itemIds: toggleDealItem\(d\.itemIds, id, menu\)/);
+  });
+
+  it("the all-hidden message shows straight away, not only after Save", () => {
+    assert.match(form, /\{allHidden && \( <p role="alert"[^>]*> \{DEAL_DISHES_ALL_HIDDEN\}/);
+  });
+
+  it("a hidden free item shows as a disabled option", () => {
+    assert.match(form, /<option value=\{hiddenFreeItem\.id\} disabled>/);
+  });
+
+  it("the edit page loads the hidden dishes' names and passes them to the form", () => {
+    assert.match(page, /loadHiddenDealDishes\(supabase, cook\.userId, hiddenIds\)/);
+    assert.match(page, /<PromotionForm menu=\{menu\} hiddenDishes=\{hiddenDishes\}/);
+  });
+
+  it("the hidden-dish read is limited to this kitchen, hidden dishes, and this deal's ids", () => {
+    const read = data.match(/export async function loadHiddenDealDishes[^]*?\.returns<DealMenuItem\[\]>\(\)/)?.[0] ?? "";
+    assert.match(read, /if \(ids\.length === 0\) return \[\];/);
+    assert.match(read, /\.eq\("kitchen_id", userId\) \.eq\("is_hidden", true\) \.in\("id", ids\)/);
   });
 });

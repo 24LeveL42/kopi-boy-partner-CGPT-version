@@ -429,6 +429,46 @@ function parseCount(s: string): number | null {
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
+// ---------------------------------------------------------------------------
+// HQ-hidden dishes in a deal (menu_items.is_hidden). `menu` holds visible
+// dishes only, so any dish of the deal that isn't in it counts as hidden.
+// The edit form keeps them as rows the cook can untick but never tick again.
+// ---------------------------------------------------------------------------
+
+export const HIDDEN_DISH_LABEL = "Hidden by HQ";
+/** Shown for a hidden dish whose name couldn't be read. */
+export const HIDDEN_DISH_FALLBACK_NAME = "A dish no longer on your menu";
+export const DEAL_DISHES_ALL_HIDDEN =
+  "Kopi Boy HQ has hidden every dish in this deal. Tick at least one dish from your menu to keep it going, or stop this deal from your deals list.";
+export const DEAL_DISH_HIDDEN_TICKED = `Untick the dishes marked "${HIDDEN_DISH_LABEL}" to save.`;
+
+/** The deal's chosen dishes that aren't on the visible menu, in the deal's order. */
+export function hiddenDealItemIds(existing: Pick<PromotionWithUsage, "item_ids"> | undefined, menu: DealMenuItem[]): string[] {
+  if (!existing) return [];
+  const visible = new Set(menu.map((m) => m.id));
+  return existing.item_ids.filter((id) => !visible.has(id));
+}
+
+/**
+ * The deal had chosen dishes, all of them are now hidden, and no visible dish
+ * is ticked: saving must be blocked, or it would quietly cover the whole menu.
+ */
+export function dealDishesAllHidden(
+  existing: Pick<PromotionWithUsage, "item_ids"> | undefined,
+  menu: DealMenuItem[],
+  itemIds: string[]
+): boolean {
+  if (!existing || existing.item_ids.length === 0) return false;
+  const visible = new Set(menu.map((m) => m.id));
+  return existing.item_ids.every((id) => !visible.has(id)) && !itemIds.some((id) => visible.has(id));
+}
+
+/** Ticking or unticking a dish: any ticked dish can be unticked; only visible dishes can be ticked. */
+export function toggleDealItem(itemIds: string[], id: string, menu: DealMenuItem[]): string[] {
+  if (itemIds.includes(id)) return itemIds.filter((x) => x !== id);
+  return menu.some((m) => m.id === id) ? [...itemIds, id] : itemIds;
+}
+
 /** The eligible items: the chosen ones, or the whole menu when none are chosen. */
 export function eligibleItems(menu: DealMenuItem[], itemIds: string[]): DealMenuItem[] {
   if (itemIds.length === 0) return menu;
@@ -546,7 +586,8 @@ function validateOffer(
   let itemIds: string[] = [];
   if (info.usesItems) {
     itemIds = [...new Set(draft.itemIds)];
-    if (itemIds.some((id) => !menuIds.has(id))) errors.itemIds = "One of the chosen items isn't on your menu any more. Untick it and try again.";
+    if (dealDishesAllHidden(ctx.existing, ctx.menu, itemIds)) errors.itemIds = DEAL_DISHES_ALL_HIDDEN;
+    else if (itemIds.some((id) => !menuIds.has(id))) errors.itemIds = DEAL_DISH_HIDDEN_TICKED;
   }
   const eligible = eligibleItems(ctx.menu, itemIds);
   if (info.usesItems && eligible.length === 0 && !errors.itemIds) errors.itemIds = "Add items to your menu before creating a deal.";

@@ -14,8 +14,14 @@ import {
   QUICK_ENDS,
   TERMS_MAX,
   TITLE_MAX,
+  DEAL_DISHES_ALL_HIDDEN,
+  HIDDEN_DISH_FALLBACK_NAME,
+  HIDDEN_DISH_LABEL,
   countsPortions,
+  dealDishesAllHidden,
   describePromotionError,
+  hiddenDealItemIds,
+  toggleDealItem,
   draftFromPromotion,
   editLocks,
   emptyDraft,
@@ -44,11 +50,14 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 
 export function PromotionForm({
   menu,
+  hiddenDishes = [],
   settings,
   existing,
   serverNow,
 }: {
   menu: DealMenuItem[];
+  /** Names of this deal's dishes that HQ has hidden (edit only). */
+  hiddenDishes?: DealMenuItem[];
   settings: DealSettings;
   existing?: PromotionWithUsage;
   serverNow: number;
@@ -115,8 +124,20 @@ export function PromotionForm({
 
   function toggleItem(id: string) {
     setTouched(true);
-    setDraft((d) => ({ ...d, itemIds: d.itemIds.includes(id) ? d.itemIds.filter((x) => x !== id) : [...d.itemIds, id] }));
+    // Hidden dishes can only be unticked (toggleDealItem never adds one).
+    setDraft((d) => ({ ...d, itemIds: toggleDealItem(d.itemIds, id, menu) }));
   }
+
+  // This deal's dishes that HQ has hidden: kept as rows the cook can untick, never tick.
+  const hiddenRows = hiddenDealItemIds(existing, menu).map(
+    (id) => hiddenDishes.find((h) => h.id === id) ?? { id, name: HIDDEN_DISH_FALLBACK_NAME, price: NaN }
+  );
+  const menuIds = new Set(menu.map((m) => m.id));
+  const visibleTicked = draft.itemIds.filter((id) => menuIds.has(id)).length;
+  const hiddenTicked = draft.itemIds.length - visibleTicked;
+  const allHidden = dealDishesAllHidden(existing, menu, draft.itemIds);
+  const hiddenFreeItem =
+    draft.freeItemId && !menuIds.has(draft.freeItemId) ? hiddenDishes.find((h) => h.id === draft.freeItemId) ?? null : null;
 
   function pickQuickEnd(e: React.MouseEvent<HTMLButtonElement>) {
     const choice = e.currentTarget.value as QuickEnd;
@@ -286,6 +307,11 @@ export function PromotionForm({
             <FormField label="Free item">
               <select value={draft.freeItemId} onChange={(e) => set("freeItemId", e.target.value)} className="kb-input">
                 <option value="">Choose a dish…</option>
+                {hiddenFreeItem && (
+                  <option value={hiddenFreeItem.id} disabled>
+                    {hiddenFreeItem.name} ({HIDDEN_DISH_LABEL})
+                  </option>
+                )}
                 {menu.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name} ({money(Number(m.price))})
@@ -307,8 +333,22 @@ export function PromotionForm({
             <div>
               <p className="text-xs font-semibold" style={{ color: "var(--kb-ink-soft)" }}>Which items</p>
               <p className="mt-0.5 text-xs" style={{ color: "var(--kb-ink-soft)" }}>
-                {draft.itemIds.length === 0 ? "None ticked: the deal covers your whole menu." : `${draft.itemIds.length} ticked.`}
+                {allHidden
+                  ? "No dish from your menu ticked."
+                  : draft.itemIds.length === 0
+                    ? "None ticked: the deal covers your whole menu."
+                    : `${visibleTicked} ticked${hiddenTicked > 0 ? `, plus ${hiddenTicked} hidden by HQ to untick` : ""}.`}
               </p>
+              {/* Shown straight away, not only after Save: saving is blocked until a visible dish is ticked or the deal is stopped. */}
+              {allHidden && (
+                <p
+                  role="alert"
+                  className="mt-2 rounded-2xl border px-3 py-2 text-sm font-semibold"
+                  style={{ borderColor: "rgba(245,158,11,0.45)", background: "rgba(245,158,11,0.12)", color: "var(--kb-ink)" }}
+                >
+                  {DEAL_DISHES_ALL_HIDDEN}
+                </p>
+              )}
               <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-2xl border p-2" style={{ borderColor: "var(--kb-line)" }}>
                 {menu.length === 0 && <p className="p-2 text-sm" style={{ color: "var(--kb-ink-soft)" }}>Your menu is empty.</p>}
                 {menu.map((m) => (
@@ -318,8 +358,31 @@ export function PromotionForm({
                     <span className="shrink-0 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{money(Number(m.price))}</span>
                   </label>
                 ))}
+                {hiddenRows.map((h) => {
+                  const ticked = draft.itemIds.includes(h.id);
+                  return (
+                    <label key={h.id} data-hidden-dish className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm" style={{ opacity: ticked ? 1 : 0.6 }}>
+                      {/* Untick only: once unticked it's disabled, so it can't be ticked again. */}
+                      <input
+                        type="checkbox"
+                        checked={ticked}
+                        disabled={!ticked}
+                        onChange={() => toggleItem(h.id)}
+                        aria-label={`${h.name}, ${HIDDEN_DISH_LABEL}${ticked ? ", untick to remove it from this deal" : ", removed"}`}
+                        className="h-4 w-4 shrink-0 accent-[#7B3FE4]"
+                      />
+                      <span className="min-w-0 flex-1 truncate line-through decoration-1" style={{ color: "var(--kb-ink-soft)" }}>
+                        {h.name}
+                      </span>
+                      <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: "rgba(245,158,11,0.15)", color: "#B45309" }}>
+                        {HIDDEN_DISH_LABEL}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
-              <FieldError message={errors.itemIds} />
+              {/* The all-hidden message is already shown above. */}
+              {allHidden ? null : <FieldError message={errors.itemIds} />}
             </div>
           )}
 
