@@ -34,8 +34,8 @@ export default async function Home() {
 
   const user = auth.user;
   if (!user) {
-    // Signed-out landing page: the only place the offer pop-up appears.
-    return <LoginForm showOffer />;
+    // Signed-out landing page. Founding-offer pop-up is off; add the showOffer prop to bring it back.
+    return <LoginForm />;
   }
 
   // Profile, latest applications and kitchen, with a time limit and one

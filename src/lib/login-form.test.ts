@@ -179,10 +179,10 @@ describe("the sign-in screen is only for signed-out visitors", () => {
   const home = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const login = readFileSync(new URL("../app/login/page.tsx", import.meta.url), "utf8");
   it("/ shows LoginForm only when there is no user", () => {
-    assert.match(home, /if \(!user\) \{\s*(\/\/[^\n]*\s*)?return <LoginForm showOffer \/>;/);
+    assert.match(home, /if \(!user\) \{\s*(\/\/[^\n]*\s*)?return <LoginForm \/>;/);
   });
-  it("only / shows the offer pop-up, never /login (and so never /welcome or the auth callback)", () => {
-    assert.equal(home.match(/showOffer/g)?.length, 1);
+  it("the founding-offer pop-up is switched off: neither / nor /login passes showOffer", () => {
+    assert.doesNotMatch(home, /<LoginForm[^>]*showOffer/);
     assert.doesNotMatch(login, /showOffer/);
   });
   it("/login sends a signed-in user straight on", () => {
