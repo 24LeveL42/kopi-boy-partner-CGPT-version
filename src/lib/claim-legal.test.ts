@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { parseInline, parseLegalMarkdown } from "./legal-markdown.ts";
-import { CLAIM_STATUS_COPY, claimStatement, formatPrice, PARTNER_TERMS_SENTENCE } from "./claim-copy.ts";
+import { CLAIM_STATUS_COPY, canClaimShop, claimStatement, formatPrice, NO_TOKEN_COPY, PARTNER_TERMS_SENTENCE } from "./claim-copy.ts";
 import { KITCHEN_TERMS } from "./kitchen-profile.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
@@ -50,7 +50,23 @@ describe("claim wording", () => {
     assert.equal(CLAIM_STATUS_COPY.expired.message, "This link has expired, ask Kopi Boy for a new link.");
   });
 
+  it("no link in the address: tells the owner to open the WhatsApp link again, word for word", () => {
+    assert.equal(NO_TOKEN_COPY.message, "Open the link Kopi Boy sent you on WhatsApp again.");
+  });
+
   it("formats prices in dollars", () => {
     assert.equal(formatPrice(4.5), "S$4.50");
+  });
+});
+
+describe("claim button", () => {
+  it("stays off until the owner ticks \"I have read\" (scrolling to the end is not enough)", () => {
+    assert.equal(canClaimShop({ ticked: false, busy: false }), false);
+    assert.equal(canClaimShop({ ticked: true, busy: false }), true);
+  });
+
+  it("stays off while a claim is being sent, even when ticked", () => {
+    assert.equal(canClaimShop({ ticked: true, busy: true }), false);
+    assert.equal(canClaimShop({ ticked: false, busy: true }), false);
   });
 });

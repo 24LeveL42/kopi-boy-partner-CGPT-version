@@ -37,7 +37,7 @@ export const CLAIM_STATUS_COPY: Record<Exclude<ClaimResultStatus, "ok">, { title
 /** No token in the address: /claim opened directly, or the app opened from the home screen. */
 export const NO_TOKEN_COPY = {
   title: "Open your Kopi Boy link",
-  message: "Please open the link Kopi Boy sent you on WhatsApp.",
+  message: "Open the link Kopi Boy sent you on WhatsApp again.",
 };
 
 /**
@@ -57,7 +57,12 @@ export function claimStatement(shopName: string): string {
 
 export const CLAIM_BUTTON = "I acknowledge";
 export const READ_TICK = "I have read the Terms of Use and Privacy Policy";
-export const SCROLL_HINT = "Scroll to the end of the Terms of Use and Privacy Policy, or tick the box, to continue.";
+export const TICK_HINT = "Read the Terms of Use and Privacy Policy, then tick the box to continue.";
+
+/** The claim button works only once the owner ticks "I have read" (scrolling alone isn't enough), and not while a claim is being sent. */
+export function canClaimShop({ ticked, busy }: { ticked: boolean; busy: boolean }): boolean {
+  return ticked && !busy;
+}
 
 /** On /kitchen while the kitchen isn't live yet. */
 export const PAYNOW_TO_GO_LIVE = {

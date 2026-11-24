@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Logo } from "./Logo";
 import { MERCHANT_CATEGORIES } from "@/lib/kitchen-profile";
 import type { ClaimItem, ClaimResultStatus, ClaimShop } from "@/lib/assisted-claim";
@@ -11,8 +11,9 @@ import {
   NO_TOKEN_COPY,
   PARTNER_TERMS_SENTENCE,
   READ_TICK,
-  SCROLL_HINT,
   SIGNED_OUT_OWNER_COPY,
+  TICK_HINT,
+  canClaimShop,
   claimStatement,
   formatPrice,
 } from "@/lib/claim-copy";
@@ -54,11 +55,9 @@ async function post(path: string, token: string): Promise<{ status: ClaimResultS
 export function ClaimFlow({ terms, privacy }: { terms: ReactNode; privacy: ReactNode }) {
   const tokenRef = useRef<string | null>(null);
   const [view, setView] = useState<View>({ kind: "loading" });
-  const [readToEnd, setReadToEnd] = useState(false);
   const [ticked, setTicked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errorShown, setErrorShown] = useState(false);
-  const legalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const token = window.location.hash.replace(/^#/, "").trim();
@@ -84,16 +83,6 @@ export function ClaimFlow({ terms, privacy }: { terms: ReactNode; privacy: React
       cancelled = true;
     };
   }, []);
-
-  const checkScrolled = useCallback(() => {
-    const el = legalRef.current;
-    if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 32) setReadToEnd(true);
-  }, []);
-
-  // A box that already shows everything (large screens) counts as read.
-  useEffect(() => {
-    if (view.kind === "preview") checkScrolled();
-  }, [view.kind, checkScrolled]);
 
   async function claim() {
     const token = tokenRef.current;
@@ -146,7 +135,7 @@ export function ClaimFlow({ terms, privacy }: { terms: ReactNode; privacy: React
 
   const { shop, items } = view;
   const category = MERCHANT_CATEGORIES.find((c) => c.id === shop.category)?.label ?? shop.category;
-  const canClaim = (readToEnd || ticked) && !busy;
+  const canClaim = canClaimShop({ ticked, busy });
 
   return (
     <Frame>
@@ -196,8 +185,6 @@ export function ClaimFlow({ terms, privacy }: { terms: ReactNode; privacy: React
       <section className="mt-6">
         <h2 className="font-display text-xl font-bold" style={{ color: "var(--kb-ink)" }}>Please read</h2>
         <div
-          ref={legalRef}
-          onScroll={checkScrolled}
           tabIndex={0}
           aria-label="Terms of Use and Privacy Policy"
           className="kb-card mt-3 max-h-[60vh] overflow-y-auto overscroll-contain p-5"
@@ -226,8 +213,8 @@ export function ClaimFlow({ terms, privacy }: { terms: ReactNode; privacy: React
         {claimStatement(shop.business_name)}
       </p>
 
-      {!readToEnd && !ticked ? (
-        <p className="mt-3 text-base" style={{ color: "var(--kb-ink-soft)" }}>{SCROLL_HINT}</p>
+      {!ticked ? (
+        <p className="mt-3 text-base" style={{ color: "var(--kb-ink-soft)" }}>{TICK_HINT}</p>
       ) : null}
       {errorShown ? (
         <p className="mt-3 rounded-2xl px-4 py-3 text-base font-semibold" role="alert" style={{ background: "#FEF2F2", color: "#991B1B" }}>
