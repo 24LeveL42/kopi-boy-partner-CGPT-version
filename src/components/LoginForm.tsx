@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { usePendingAction } from "@/lib/use-pending-action";
 import { authCallbackUrl } from "@/lib/auth-callback";
 import { isInAppBrowser } from "@/lib/in-app-browser";
+import { isStandaloneApp } from "@/lib/standalone-app";
+import { SIGNED_OUT_OWNER_COPY } from "@/lib/claim-copy";
 import { copyText, legacyCopy } from "@/lib/copy-link";
 import { createBrowserTracker, markSigninTracked, type RegistrationTracker } from "@/lib/registration-tracking";
 import { GOOGLE_SLOW_MESSAGE, GOOGLE_WAIT_MS, IN_APP_BROWSER_COPY } from "@/lib/onboarding-copy";
@@ -62,6 +64,7 @@ export function LoginForm({
 
   const { busy, isRunning, run } = usePendingAction();
   const inAppBrowser = useSyncExternalStore(subscribeNever, () => isInAppBrowser(navigator.userAgent), () => false);
+  const standaloneApp = useSyncExternalStore(subscribeNever, isStandaloneApp, () => false);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const supabase = createClient();
@@ -185,6 +188,14 @@ export function LoginForm({
             Cook, deliver or pick up with Kopi Boy.
           </p>
         </div>
+
+        {/* Home-screen app: an owner whose shop Kopi Boy set up has no Google or email sign-in (PIN login: v1.1). */}
+        {standaloneApp && (
+          <div role="status" className="mb-4 rounded-2xl border px-4 py-3 text-left" style={{ borderColor: "rgba(124,58,237,0.20)", background: "rgba(124,58,237,0.06)" }}>
+            <p className="text-base font-bold" style={{ color: "var(--kb-ink)" }}>{SIGNED_OUT_OWNER_COPY.title}</p>
+            <p className="mt-1 text-base leading-7" style={{ color: "var(--kb-ink-soft)" }}>{SIGNED_OUT_OWNER_COPY.message}</p>
+          </div>
+        )}
 
         {/* Main Ferrari card */}
         <div

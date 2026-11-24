@@ -5,6 +5,7 @@ import { CookOrdersPanel } from "./CookOrdersPanel";
 import { RiderDeliveriesPanel } from "./RiderDeliveriesPanel";
 import { ProfileSummaryCard, type ProfileSummary } from "./ProfileSummaryCard";
 import { RideRegionsPrompt } from "./RideRegionsPrompt";
+import { NOT_LIVE_BANNER } from "@/lib/claim-copy";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -18,6 +19,7 @@ export function PartnerShell({
   partnerName,
   businessName,
   promptRideRegions = false,
+  kitchenNotLive = false,
 }: {
   userId: string;
   defaultView: "cook" | "rider";
@@ -26,6 +28,8 @@ export function PartnerShell({
   businessName?: string | null;
   /** A rider with no regions saved yet: show the gentle prompt (never blocks deliveries). */
   promptRideRegions?: boolean;
+  /** Cook whose kitchens.is_live is false (e.g. a shop just claimed, no PayNow yet): the "not live yet" banner. */
+  kitchenNotLive?: boolean;
 }) {
   const isCook = defaultView === "cook";
 
@@ -70,6 +74,22 @@ export function PartnerShell({
             ) : null}
           </div>
         </section>
+
+        {isCook && kitchenNotLive && (
+          <section
+            role="status"
+            className="flex flex-col gap-3 rounded-[24px] border p-5 sm:flex-row sm:items-center sm:justify-between"
+            style={{ borderColor: "rgba(245,158,11,0.40)", background: "rgba(245,158,11,0.10)" }}
+          >
+            <div className="min-w-0">
+              <p className="font-display text-xl font-bold" style={{ color: "var(--kb-ink)" }}>{NOT_LIVE_BANNER.title}</p>
+              <p className="mt-1 text-base leading-7" style={{ color: "var(--kb-ink-soft)" }}>{NOT_LIVE_BANNER.message}</p>
+            </div>
+            <Link href="/kitchen#paynow" className="partner-primary inline-flex min-h-12 shrink-0 items-center justify-center rounded-2xl px-5 text-base font-bold">
+              {NOT_LIVE_BANNER.action}
+            </Link>
+          </section>
+        )}
 
         {!isCook && promptRideRegions && <RideRegionsPrompt />}
 

@@ -13,6 +13,7 @@ import { useBackHandler, useCancelHandler } from "./AppChrome";
 import type { Kitchen, KitchenPrivate, MenuItem, MerchantCategory, CuisineType, PaynowType } from "@/lib/types-kitchen";
 import { saveKitchenRow } from "@/lib/kitchen-private";
 import { kitchenPaynowCheck } from "@/lib/paynow-details";
+import { PAYNOW_TO_GO_LIVE } from "@/lib/claim-copy";
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
 import { NEW_TAB, PRIVACY_LINK_LABEL, PRIVACY_URL, TERMS_LINK_LABEL, TERMS_URL } from "@/lib/legal-links";
@@ -667,6 +668,20 @@ export function KitchenSetupForm({
             </button>
           </div>
         )}
+        {/* A saved kitchen that isn't live yet (e.g. a shop just claimed from Kopi Boy, no PayNow): saving with PayNow puts it live. */}
+        {existingKitchen && !existingKitchen.is_live && (
+          <div
+            role="status"
+            className="mb-5 rounded-[22px] border p-4 text-left"
+            style={{ borderColor: "rgba(245,158,11,0.40)", background: "rgba(245,158,11,0.10)" }}
+          >
+            <p className="font-display text-lg font-bold" style={{ color: "var(--kb-ink)" }}>{PAYNOW_TO_GO_LIVE.title}</p>
+            <p className="mt-1 text-base leading-7" style={{ color: "var(--kb-ink)" }}>{PAYNOW_TO_GO_LIVE.message}</p>
+            <a href="#paynow" className="mt-2 inline-flex min-h-11 items-center text-base font-bold underline" style={{ color: "var(--kb-purple)" }}>
+              {PAYNOW_TO_GO_LIVE.action}
+            </a>
+          </div>
+        )}
         <div className="text-center">
           <span className="kb-pill mb-2">Kitchen partner</span>
         </div>
@@ -812,6 +827,7 @@ export function KitchenSetupForm({
                 </p>
               )}
             </Field>
+            <div id="paynow" className="scroll-mt-6" aria-hidden="true" />
             <Field label="PayNow method (customers pay you directly)">
               <select
                 value={paynowType}

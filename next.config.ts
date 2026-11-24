@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // /claim is prerendered with the Terms and Privacy text baked in
+  // (src/lib/legal-content.ts). Should it ever render at request time on
+  // Vercel, these files must be in its function bundle too.
+  outputFileTracingIncludes: {
+    "/claim": ["./src/content/legal/*.md"],
+  },
 };
 
 export default nextConfig;

@@ -140,6 +140,7 @@ export default async function Home() {
               partnerName={profile?.full_name ?? null}
               businessName={screen.view === "cook" ? kitchen?.business_name ?? null : null}
               promptRideRegions={promptRideRegions}
+              kitchenNotLive={screen.view === "cook" && kitchen?.is_live === false}
               riderProfile={
                 screen.view === "rider"
                   ? { fullName: profile?.full_name ?? null, phone: profile?.phone ?? null, photoUrl: profile?.photo_url ?? null }
