@@ -12,6 +12,7 @@ import { loadKitchenRegion } from "@/lib/ride-regions";
 import { loadUser } from "@/lib/partner-state";
 import { retryOnce, withTimeout } from "@/lib/load-timeout";
 import { KITCHEN_LOAD_ERROR_COPY, LOAD_ERROR_COPY } from "@/lib/onboarding-copy";
+import { kitchenUenState, loadApprovedBusinessType } from "@/lib/kitchen-uen";
 
 interface KitchenPageData {
   profile: Profile | null;
@@ -23,6 +24,8 @@ interface KitchenPageData {
   items: MenuItem[];
   /** Add-ons by dish id; null = they couldn't be read (see below). */
   addons: Record<string, SavedGroup[]> | null;
+  /** The latest approved cook application (same rule as the database); decides whether a UEN is needed. */
+  approvedApp: { business_type: string | null } | null;
 }
 
 /** One attempt at everything the page needs; the caller adds the time limit and retry. */
@@ -31,7 +34,7 @@ async function readKitchenPage(supabase: SupabaseClient, userId: string, signal:
   // get_my_kitchen_private() — kitchen privacy Phase 2.
   // kitchens.region is a read of its own (loadKitchenRegion): if it fails,
   // only the "Your region" line goes, never the page.
-  const [profileRead, kitchenRead, privateLoad, { data: address }, { data: items }] = await Promise.all([
+  const [profileRead, kitchenRead, privateLoad, { data: address }, { data: items }, approved] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).abortSignal(signal).single<Profile>(),
     supabase.from("kitchens").select(KITCHEN_COLUMNS).eq("id", userId).abortSignal(signal).maybeSingle<Kitchen>(),
     loadMyKitchenPrivate(supabase, userId),
@@ -50,6 +53,9 @@ async function readKitchenPage(supabase: SupabaseClient, userId: string, signal:
       .order("created_at", { ascending: true })
       .abortSignal(signal)
       .returns<MenuItem[]>(),
+    // Never guessed: a failed read retries, then shows "Try again", so a shop
+    // that needs a UEN is never sent is_live: true without one.
+    loadApprovedBusinessType(supabase, userId, signal),
   ]);
 
   // Add-ons for the dishes, by dish id. null = they couldn't be read, and
@@ -72,12 +78,13 @@ async function readKitchenPage(supabase: SupabaseClient, userId: string, signal:
   if (kitchenRead.error) console.error("Kitchen page: couldn't load the kitchen", kitchenRead.error);
   return {
     profile: profileRead.data,
-    failed: profileFailed || !!kitchenRead.error,
+    failed: profileFailed || !!kitchenRead.error || !approved.ok,
     kitchen: kitchenRead.data,
     privateLoad,
     address: address ?? null,
     items: items ?? [],
     addons,
+    approvedApp: approved.ok ? approved.approvedApp : null,
   };
 }
 
@@ -107,7 +114,7 @@ export default async function KitchenPage() {
   if (!page || page.failed) {
     return <RetryScreen signOut title={KITCHEN_LOAD_ERROR_COPY.title} message={KITCHEN_LOAD_ERROR_COPY.message} />;
   }
-  const { kitchen, privateLoad, address, items, addons } = page;
+  const { kitchen, privateLoad, address, items, addons, approvedApp } = page;
 
   return (
     <KitchenSetupForm
@@ -127,6 +134,7 @@ export default async function KitchenPage() {
       existingItems={items}
       existingAddons={addons}
       region={region}
+      uenState={kitchen ? kitchenUenState({ approvedApp, kitchenUen: kitchen.business_uen, isLive: kitchen.is_live }) : { kind: "not-needed" }}
     />
   );
 }

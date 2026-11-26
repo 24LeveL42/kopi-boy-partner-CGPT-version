@@ -14,6 +14,7 @@ import type { Kitchen, KitchenPrivate, MenuItem, MerchantCategory, CuisineType, 
 import { saveKitchenRow } from "@/lib/kitchen-private";
 import { kitchenPaynowCheck } from "@/lib/paynow-details";
 import { PAYNOW_TO_GO_LIVE } from "@/lib/claim-copy";
+import { KITCHEN_UEN_COPY, isLiveField, runUenStep, type KitchenUenState } from "@/lib/kitchen-uen";
 import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
 import { NEW_TAB, PRIVACY_LINK_LABEL, PRIVACY_URL, TERMS_LINK_LABEL, TERMS_URL } from "@/lib/legal-links";
@@ -127,6 +128,7 @@ export function KitchenSetupForm({
   existingItems,
   existingAddons = {},
   region = null,
+  uenState: initialUenState = { kind: "not-needed" },
   onCancel,
 }: {
   userId: string;
@@ -150,6 +152,11 @@ export function KitchenSetupForm({
    * Shown read-only; never sent on save. null = not known (not shown).
    */
   region?: RegionCode | null;
+  /**
+   * Business UEN for shops whose approved application isn't Home Cook
+   * (src/lib/kitchen-uen.ts). "not-needed" (the default) changes nothing.
+   */
+  uenState?: KitchenUenState;
   /** Where Cancel goes. Defaults to Home; first-time setup (which *is* Home) passes its own. */
   onCancel?: () => void;
 }) {
@@ -211,6 +218,10 @@ export function KitchenSetupForm({
   const [addonErrors, setAddonErrors] = useState<{ fields: Record<string, string>; dishes: Record<string, string> }>({ fields: {}, dishes: {} });
   // Set from the moment a save starts until it ends (see handleSubmit).
   const saveInFlight = useRef(false);
+  // Business UEN (only for shops that need one): what's saved, what's typed, and what went wrong.
+  const [uenState, setUenState] = useState<KitchenUenState>(initialUenState);
+  const [uenInput, setUenInput] = useState("");
+  const [uenError, setUenError] = useState<string | null>(null);
 
   function leave() {
     if (onCancel) onCancel();
@@ -479,6 +490,16 @@ export function KitchenSetupForm({
     }
     setFoundAddress({ postal, address: location.address });
 
+    // The UEN first (shops that need one): the database won't let the
+    // kitchen go live without it. If it's missing or not accepted, the rest
+    // still saves, just without is_live, and its error shows under the box.
+    const uenStep = await runUenStep(uenState, uenInput, (fn, args) => supabase.rpc(fn, args));
+    setUenError(uenStep.goLive ? null : uenStep.error);
+    if (uenStep.goLive && uenStep.savedUen) {
+      setUenState({ kind: "saved", uen: uenStep.savedUen });
+      setUenInput("");
+    }
+
     // Insert the first time, update after (never upsert: see saveKitchenRow).
     const { error: kitchenError } = await saveKitchenRow(supabase, userId, isEdit, {
       business_name: businessName.trim(),
@@ -492,7 +513,8 @@ export function KitchenSetupForm({
       // Any non-null value means "ticked" — the DB stamps its own now()
       // the first time and keeps that original timestamp afterwards.
       acknowledged_terms_at: new Date().toISOString(),
-      is_live: true,
+      // true only once any UEN the shop needs is in; otherwise not sent.
+      ...isLiveField(uenStep),
     });
     if (kitchenError) throw kitchenError;
 
@@ -569,6 +591,13 @@ export function KitchenSetupForm({
     const addonsFailed = await saveAddons(addonJobs, plan, insertedRows);
     if (addonsFailed) {
       setError(addonsFailed);
+      return;
+    }
+
+    // Saved, but not live because of the UEN: stay here so the owner sees why.
+    if (!uenStep.goLive) {
+      setTouched(false);
+      setNotice(KITCHEN_UEN_COPY.savedNotLive);
       return;
     }
 
@@ -669,19 +698,27 @@ export function KitchenSetupForm({
           </div>
         )}
         {/* A saved kitchen that isn't live yet (e.g. a shop just claimed from Kopi Boy, no PayNow): saving with PayNow puts it live. */}
-        {existingKitchen && !existingKitchen.is_live && (
-          <div
-            role="status"
-            className="mb-5 rounded-[22px] border p-4 text-left"
-            style={{ borderColor: "rgba(245,158,11,0.40)", background: "rgba(245,158,11,0.10)" }}
-          >
-            <p className="font-display text-lg font-bold" style={{ color: "var(--kb-ink)" }}>{PAYNOW_TO_GO_LIVE.title}</p>
-            <p className="mt-1 text-base leading-7" style={{ color: "var(--kb-ink)" }}>{PAYNOW_TO_GO_LIVE.message}</p>
-            <a href="#paynow" className="mt-2 inline-flex min-h-11 items-center text-base font-bold underline" style={{ color: "var(--kb-purple)" }}>
-              {PAYNOW_TO_GO_LIVE.action}
-            </a>
-          </div>
-        )}
+        {/* While a needed UEN is missing, the note asks for the UEN (and PayNow) instead. */}
+        {existingKitchen && !existingKitchen.is_live && (() => {
+          const note = uenState.kind === "missing" ? KITCHEN_UEN_COPY.banner : PAYNOW_TO_GO_LIVE;
+          return (
+            <div
+              role="status"
+              className="mb-5 rounded-[22px] border p-4 text-left"
+              style={{ borderColor: "rgba(245,158,11,0.40)", background: "rgba(245,158,11,0.10)" }}
+            >
+              <p className="font-display text-lg font-bold" style={{ color: "var(--kb-ink)" }}>{note.title}</p>
+              <p className="mt-1 text-base leading-7" style={{ color: "var(--kb-ink)" }}>{note.message}</p>
+              <a
+                href={uenState.kind === "missing" ? "#uen" : "#paynow"}
+                className="mt-2 inline-flex min-h-11 items-center text-base font-bold underline"
+                style={{ color: "var(--kb-purple)" }}
+              >
+                {note.action}
+              </a>
+            </div>
+          );
+        })()}
         <div className="text-center">
           <span className="kb-pill mb-2">Kitchen partner</span>
         </div>
@@ -708,6 +745,7 @@ export function KitchenSetupForm({
                 className="kb-input"
               />
             </Field>
+            <KitchenUenField state={uenState} value={uenInput} onChange={setUenInput} error={uenError} />
             <Field label="Category">
               <select
                 value={category}
@@ -1109,4 +1147,60 @@ function removalText(a: AffectedDeal, names: (ids: string[]) => string): string 
     return `${names(a.removedItemIds)} ${one ? "is the only item" : "are the only items"} in this deal. Without ${one ? "it" : "them"} the deal would apply to your whole menu, so it will be stopped.`;
   }
   return `${names(a.removedItemIds)} will be taken out of this deal.`;
+}
+
+/**
+ * Business UEN, for shops whose approved application isn't Home Cook. Missing
+ * (not live): a box with why it's needed. Saved but not live: shown read-only.
+ * Live: read-only, and HQ changes it (the database refuses owner changes).
+ * Home Cook and anyone else: nothing.
+ */
+function KitchenUenField({
+  state,
+  value,
+  onChange,
+  error,
+}: {
+  state: KitchenUenState;
+  value: string;
+  onChange: (value: string) => void;
+  error: string | null;
+}) {
+  if (state.kind === "not-needed") return null;
+  if (state.kind === "missing") {
+    return (
+      <div id="uen" className="scroll-mt-6 rounded-2xl border p-4" style={{ borderColor: "rgba(245,158,11,0.40)", background: "rgba(245,158,11,0.08)" }}>
+        <p className="font-display text-base font-bold" style={{ color: "var(--kb-ink)" }}>{KITCHEN_UEN_COPY.title}</p>
+        <p className="mt-0.5 text-sm" style={{ color: "var(--kb-ink-soft)" }}>{KITCHEN_UEN_COPY.why}</p>
+        <Field label={KITCHEN_UEN_COPY.label} className="mt-3">
+          <input
+            name="business_uen"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={KITCHEN_UEN_COPY.placeholder}
+            autoCapitalize="characters"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "uen-error" : undefined}
+            className="kb-input"
+          />
+        </Field>
+        {error && (
+          <p id="uen-error" role="alert" className="mt-1 text-sm font-semibold" style={{ color: "var(--kb-danger)" }}>
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div id="uen" className="scroll-mt-6">
+      <p className="text-xs font-semibold" style={{ color: "var(--kb-ink-soft)" }}>{KITCHEN_UEN_COPY.savedLabel}</p>
+      <p className="kb-input mt-1.5" style={{ opacity: 0.75 }} aria-readonly="true">
+        {state.uen ?? KITCHEN_UEN_COPY.notAdded}
+      </p>
+      {state.kind === "locked" && (
+        <p className="mt-1 text-xs" style={{ color: "var(--kb-ink-soft)" }}>{KITCHEN_UEN_COPY.lockedNote}</p>
+      )}
+    </div>
+  );
 }

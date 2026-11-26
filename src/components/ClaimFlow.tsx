@@ -5,6 +5,7 @@ import { Logo } from "./Logo";
 import { MERCHANT_CATEGORIES } from "@/lib/kitchen-profile";
 import type { ClaimItem, ClaimResultStatus, ClaimShop } from "@/lib/assisted-claim";
 import { isStandaloneApp } from "@/lib/standalone-app";
+import { KITCHEN_UEN_COPY, claimShowsUenLine } from "@/lib/kitchen-uen";
 import {
   CLAIM_BUTTON,
   CLAIM_STATUS_COPY,
@@ -158,6 +159,9 @@ export function ClaimFlow({ terms, privacy }: { terms: ReactNode; privacy: React
           <Detail label="Address" value={[shop.business_address, shop.postal_code].filter(Boolean).join(" ")} />
         ) : null}
         {shop.business_uen ? <Detail label="UEN" value={shop.business_uen} /> : null}
+        {claimShowsUenLine(shop) ? (
+          <p className="text-base leading-7" style={{ color: "var(--kb-ink)" }}>{KITCHEN_UEN_COPY.claimLine}</p>
+        ) : null}
         {shop.description ? <p className="text-base leading-7" style={{ color: "var(--kb-ink-soft)" }}>{shop.description}</p> : null}
       </section>
 
