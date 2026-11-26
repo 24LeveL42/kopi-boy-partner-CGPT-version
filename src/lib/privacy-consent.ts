@@ -15,7 +15,7 @@
 import type { PartnerRole } from "./types";
 import { PRIVACY_URL } from "./legal-links.ts";
 
-export const PRIVACY_POLICY_VERSION = "2026-10-v1";
+export const PRIVACY_POLICY_VERSION = "2026-11-pilot";
 
 /**
  * Where the Privacy Policy lives: the Customer app's public page

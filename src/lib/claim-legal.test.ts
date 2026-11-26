@@ -31,6 +31,34 @@ describe("legal texts copied into the Partner app", () => {
   });
 });
 
+describe("pilot partner terms", () => {
+  const terms = read("terms");
+  const privacy = read("privacy");
+
+  it("the merchant section states the five pilot terms, word for word", () => {
+    const items = [
+      "- **Free during the pilot.** Joining and using Kopi Boy is free. There is no subscription, registration fee or setup fee, and you pay Kopi Boy nothing during the pilot.",
+      "- **Payments.** Customers pay you directly by PayNow. Kopi Boy does not collect or hold payments. If a rider delivers an order, you pay the rider the delivery fee when they collect it.",
+      "- **If a commission starts later.** It will be 15% of your food sales after discounts. The delivery fee is not included, and the rate will never be higher than 15%.",
+      "- **Notice before any charge.** We will give you at least 30 days' written notice, in the app and by message, before any charge starts. Nothing is charged before the notice ends, and never for orders placed earlier.",
+      "- **Leaving.** You can leave at any time, with no penalty.",
+    ];
+    assert.ok(terms.includes(`## 5. For merchants\n\n${items.join("\n")}\n`));
+    assert.match(terms, /During the pilot, Kopi Boy takes no commission on food sales\. \*\*We do not collect or hold your payment\.\*\*/);
+  });
+
+  it("neither document mentions a subscription price, founding offer or billing", () => {
+    for (const text of [terms, privacy]) {
+      assert.doesNotMatch(text, /29\.9|subscription payments?|subscription price|founding|months? free|billing|late payment|grace period/i);
+    }
+  });
+
+  it("both documents take effect on 26 November 2026", () => {
+    assert.match(terms, /\*\*Effective 26 November 2026\*\*/);
+    assert.match(privacy, /\*\*Effective 26 November 2026\*\*/);
+  });
+});
+
 describe("claim wording", () => {
   it("the statement above the button names the shop, word for word", () => {
     assert.equal(

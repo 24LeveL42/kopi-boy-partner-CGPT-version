@@ -181,8 +181,10 @@ describe("the sign-in screen is only for signed-out visitors", () => {
   it("/ shows LoginForm only when there is no user", () => {
     assert.match(home, /if \(!user\) \{\s*(\/\/[^\n]*\s*)?return <LoginForm \/>;/);
   });
-  it("the founding-offer pop-up is switched off: neither / nor /login passes showOffer", () => {
-    assert.doesNotMatch(home, /<LoginForm[^>]*showOffer/);
+  it("there is no offer pop-up: LoginForm has no showOffer prop and nothing passes one", () => {
+    const form = readFileSync(new URL("../components/LoginForm.tsx", import.meta.url), "utf8");
+    assert.doesNotMatch(form, /showOffer|FoundingOffer/);
+    assert.doesNotMatch(home, /showOffer/);
     assert.doesNotMatch(login, /showOffer/);
   });
   it("/login sends a signed-in user straight on", () => {

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective 22 December 2026**
+**Effective 26 November 2026**
 
 This policy explains how **KOPIE BOY** (UEN 53535194A), trading as Kopi Boy ("we", "us"), collects, uses, shares and protects your personal data when you use the Kopi Boy website and apps. We follow Singapore's Personal Data Protection Act 2012 (PDPA).
 
@@ -10,7 +10,7 @@ This policy explains how **KOPIE BOY** (UEN 53535194A), trading as Kopi Boy ("we
 
 **When you order:** your delivery address and postal code, phone number if you give one, the items you ordered, any notes you write, and your order history.
 
-**If you are a merchant (home cook or stall):** your business name and UEN (if any), kitchen description, photos, cuisine and category, kitchen address and postal code, contact number, the PayNow details customers use to pay you, and your subscription and payment records with us.
+**If you are a merchant (home cook or stall):** your business name and UEN (if any), kitchen description, photos, cuisine and category, kitchen address and postal code, contact number, the PayNow details customers use to pay you, and, if a commission is ever introduced, the records needed to work it out and bill it.
 
 **If you are a rider:** your name, contact number, the regions you ride in, and your live location only while you choose to share it for a delivery. We do not store a home address or postal code for riders.
 
@@ -21,9 +21,9 @@ This policy explains how **KOPIE BOY** (UEN 53535194A), trading as Kopi Boy ("we
 - To create and run your account and let you sign in.
 - To let customers order, merchants prepare orders and riders deliver them.
 - To show kitchens by area and to find kitchens near you. We show customers a kitchen's area and postal sector, never its exact address or coordinates.
-- To send you service messages, such as order updates, notifications and billing reminders.
+- To send you service messages, such as order updates, notifications and notices about changes to our terms.
 - To keep Kopi Boy safe, prevent fraud and abuse, and enforce our Terms of Use.
-- To collect and record merchant subscription payments and meet our legal and accounting duties.
+- To meet our legal and accounting duties, and, if a commission is ever introduced, to work it out and record it.
 - To improve the service, and to contact you about it if you agree.
 
 ## 3. Who sees it

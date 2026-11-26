@@ -240,9 +240,9 @@ describe("POST /api/claim/complete", () => {
       p_client_key: clientKeyFor(IP, SECRET),
       p_user_id: NEW_USER_ID,
       p_user_agent: "WhatsApp/2.24 iPhone",
-      p_privacy_policy_version: "2026-10-v1",
+      p_privacy_policy_version: "2026-11-pilot",
     });
-    assert.equal(PRIVACY_POLICY_VERSION, "2026-10-v1");
+    assert.equal(PRIVACY_POLICY_VERSION, "2026-11-pilot");
   });
 
   for (const status of NON_OK) {

@@ -1,6 +1,6 @@
 # Terms of Use
 
-**Effective 22 December 2026**
+**Effective 26 November 2026**
 
 Kopi Boy is run by **KOPIE BOY** (UEN 53535194A), a sole proprietorship registered in Singapore ("Kopi Boy", "we", "us"). These terms apply to everyone who uses the Kopi Boy website and apps: customers, merchants (home cooks and stalls) and riders. By creating an account or placing an order, you agree to them. If you don't agree, please don't use Kopi Boy.
 
@@ -8,7 +8,7 @@ Kopi Boy is run by **KOPIE BOY** (UEN 53535194A), a sole proprietorship register
 
 Kopi Boy is a platform that connects customers with merchants and riders. **We are not the seller of the food and we do not cook, pack or deliver it.** When you order, you are buying from the merchant, not from us. Riders are independent people who choose to deliver; they are not our employees.
 
-**We do not take commission** on food sales. **We do not collect or hold your payment.** Customers pay the merchant directly, by PayNow, using the details shown at checkout. Any delivery fee shown in the app is only a suggested estimate; the final amount is agreed between the customer, the merchant and the rider. If a delivery fee applies, the customer pays it to the merchant as part of the order, and the merchant pays the rider. Kopi Boy takes no part of any delivery fee.
+During the pilot, Kopi Boy takes no commission on food sales. **We do not collect or hold your payment.** Customers pay the merchant directly, by PayNow, using the details shown at checkout. Any delivery fee shown in the app is only a suggested estimate; the final amount is agreed between the customer, the merchant and the rider. If a delivery fee applies, the customer pays it to the merchant as part of the order, and the merchant pays the rider. Kopi Boy takes no part of any delivery fee.
 
 ## 2. Accounts
 
@@ -32,11 +32,11 @@ Kopi Boy is a platform that connects customers with merchants and riders. **We a
 
 ## 5. For merchants
 
-- **Subscription.** Merchants pay a subscription of **S$29.95 per month** to KOPIE BOY. There is no commission on your sales. Any free or founding-merchant period will be told to you in writing (by email or in the app) and applies as told.
-- **How to pay.** Pay by PayNow or bank transfer to KOPIE BOY, using the details shown in the app or sent to you. Paying earlier for more than one month is fine.
-- **Late payment.** We will remind you first and allow a short grace period. If a subscription stays unpaid after that, we may pause your kitchen so it takes no new orders until you pay. Orders you have already accepted should still be fulfilled.
-- **Cancelling.** You can stop at any time by telling us. Months already paid are not refunded unless the law requires it.
-- **Price changes.** We will give at least 30 days' notice of any change to the subscription price.
+- **Free during the pilot.** Joining and using Kopi Boy is free. There is no subscription, registration fee or setup fee, and you pay Kopi Boy nothing during the pilot.
+- **Payments.** Customers pay you directly by PayNow. Kopi Boy does not collect or hold payments. If a rider delivers an order, you pay the rider the delivery fee when they collect it.
+- **If a commission starts later.** It will be 15% of your food sales after discounts. The delivery fee is not included, and the rate will never be higher than 15%.
+- **Notice before any charge.** We will give you at least 30 days' written notice, in the app and by message, before any charge starts. Nothing is charged before the notice ends, and never for orders placed earlier.
+- **Leaving.** You can leave at any time, with no penalty.
 - **Paying riders.** If a rider delivers your order, you are responsible for paying the rider the delivery fee you agreed with them, on time, by PayNow or cash. You may include a delivery fee in what the customer pays you, but whether you do, and how much, is for you to decide; the fee shown in the app is only a suggested estimate. Kopi Boy does not pay riders or take any part of a delivery fee.
 - **Your responsibilities.** Keep your kitchen details, menu, prices, photos, opening times and payment details accurate; prepare food safely and lawfully; fulfil orders you accept; treat customers and riders with respect; and keep customer information (such as names, phone numbers and addresses) private and use it only to fulfil the order.
 - **Your content.** You keep ownership of your photos and descriptions. You give us permission to display them in Kopi Boy and in our promotion of Kopi Boy. Only upload what you have the right to use.

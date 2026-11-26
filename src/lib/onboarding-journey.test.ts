@@ -91,69 +91,23 @@ describe("celebration confetti stays light", () => {
 
 describe("journey wording", () => {
   const allText = JSON.stringify(copy);
-  // Free months belong to the founding-partner offer pop-up only.
-  const { FOUNDING_OFFER_COPY, ...journeyOnly } = copy;
-  const journeyText = JSON.stringify(journeyOnly);
-  const offerText = JSON.stringify(FOUNDING_OFFER_COPY.offer);
-  const neutralText = JSON.stringify(FOUNDING_OFFER_COPY.neutral);
 
   it("never mentions GST, tax or a first month", () => {
     assert.doesNotMatch(allText, /\bGST\b|\btax\b|first month/i);
   });
 
-  it("mentions free months only in the founding offer", () => {
-    assert.doesNotMatch(journeyText, /free month|months? free/i);
-    assert.doesNotMatch(neutralText, /free month|months? free|founding|before \d|days? left/i);
-    assert.match(offerText, /3 MONTHS FREE/);
+  it("has no subscription price, founding offer, free months or 0% commission", () => {
+    assert.doesNotMatch(allText, /29\.9|S\$\d|founding|months? free|free months?|0% commission|per month|\/month|21 Mar|22 Mar/i);
+    assert.equal("FOUNDING_OFFER_COPY" in copy, false);
+    assert.equal("COOK_MONTHLY_PRICE" in copy, false);
   });
 
-  it("has no cap wording, and never implies joining earlier means more free months", () => {
+  it("has no cap wording", () => {
     assert.doesNotMatch(allText, /limited|spots?\b|first \d+|only \d+|while stocks|places left|hurry/i);
-    assert.doesNotMatch(offerText, /more free|extra (free )?months?|bonus|the earlier/i);
-    // Everyone's 3 months run from launch day, not from when they join.
-    assert.match(FOUNDING_OFFER_COPY.offer.joinEarly, /Your 3 free months run from 22 Dec 2026 to 22 Mar 2027\./);
   });
 
-  it("states the offer pop-up wording in order", () => {
-    const o = FOUNDING_OFFER_COPY.offer;
-    assert.equal(o.badge, "FOUNDING PARTNER OFFER");
-    assert.equal(`${o.headlineLead} ${o.headlineChip}`, "Cooks: 3 MONTHS FREE");
-    assert.equal(o.deadline, "Join before 22 Dec 2026");
-    assert.equal(
-      o.joinEarly,
-      "Join early and set up your kitchen now, so you're ready to take orders on launch day, 22 Dec. Your 3 free months run from 22 Dec 2026 to 22 Mar 2027.",
-    );
-    assert.deepEqual(o.checks, [
-      "Registration is free",
-      "0% commission. You keep 100% of what customers pay you",
-      "No credit or debit card needed",
-      "No lock-in. Don't want to continue after 3 months? Just stop",
-    ]);
-    assert.equal(o.cookButton, "Sign up as a cook, it's free");
-    assert.equal(`${o.riderStrip} ${o.riderLink}`, "Riders: free to join, free to use. Join as a rider →");
-    assert.equal(o.finePrint, "Offer for kitchens registering before 22 Dec 2026. After the free period: S$29.95/month, cancel anytime.");
-  });
-
-  it("kitchen setup help: optional, said once, the same in both versions", () => {
-    assert.deepEqual(FOUNDING_OFFER_COPY.setupHelp, {
-      badge: "FREE KITCHEN SETUP HELP · OPTIONAL",
-      line: "Need a hand? We'll set up your kitchen for you, free. Totally your choice.",
-    });
-    // Not repeated in the join-early paragraph (or anywhere else in the offer).
-    assert.doesNotMatch(JSON.stringify(FOUNDING_OFFER_COPY.offer), /set up your kitchen for you/);
-    assert.doesNotMatch(neutralText, /set up your kitchen for you/);
-  });
-
-  it("neutral version keeps the buttons and the S$29.95/month fine print", () => {
-    const n = FOUNDING_OFFER_COPY.neutral;
-    assert.equal(n.headline, "Registration is free. 0% commission. Riders always free.");
-    assert.equal(n.cookButton, FOUNDING_OFFER_COPY.offer.cookButton);
-    assert.equal(n.riderLink, FOUNDING_OFFER_COPY.offer.riderLink);
-    assert.match(n.finePrint, /S\$29\.95\/month/);
-  });
-
-  it("states the pricing exactly", () => {
-    assert.equal(copy.COOK_PRICING_LINE, "0% commission. S$29.95/month subscription.");
+  it("states the pilot pricing exactly", () => {
+    assert.equal(copy.COOK_PRICING_LINE, "Free during the pilot. No subscription or fees. Customers pay you directly.");
   });
 
   it("tells applicants the review time", () => {
