@@ -1068,6 +1068,13 @@ alter table public.picker_applications add column if not exists photo_url text;
 -- ----------------------------------------------------------------------------
 alter table public.cook_applications add column if not exists business_uen text;
 
+-- Assisted onboarding (Kopi Boy Boss, docs/supabase-assisted-uen-later.sql,
+-- installed live): the null-UEN branch below lets one insert through with
+-- no UEN, only for the claim of an HQ-made shop (flag kb_assist.uen_pending
+-- on, not anon/authenticated, status approved). The owner adds the UEN in
+-- Kitchen Setup (set_my_business_uen) and the kitchen can't go live without
+-- it (y_kitchen_live_needs_uen). This text is exactly the live one: keep it
+-- in step with that file, or re-running this section would undo it.
 create or replace function public.check_cook_application_uen()
 returns trigger
 language plpgsql
@@ -1079,7 +1086,14 @@ begin
   if new.business_type is not distinct from 'Home Cook' then
     new.business_uen := null;
   elsif new.business_uen is null then
-    raise exception 'A Business Registration Number (UEN) is required for registered businesses.' using errcode = '23514';
+    -- Assisted onboarding only (docs/supabase-assisted-uen-later.sql): the
+    -- claim may create an approved application before the owner has added
+    -- the UEN. All three must hold; anything else needs a UEN, as before.
+    if not (coalesce(current_setting('kb_assist.uen_pending', true), '') = 'on'
+            and current_user not in ('anon', 'authenticated')
+            and new.status = 'approved') then
+      raise exception 'A Business Registration Number (UEN) is required for registered businesses.' using errcode = '23514';
+    end if;
   elsif new.business_uen !~ '^([0-9]{8}[A-Z]|[0-9]{9}[A-Z]|[TSR][0-9]{2}[A-Z]{2}[0-9]{4}[A-Z])$' then
     raise exception 'That doesn''t look like a valid UEN (e.g. 53123456X or 201912345K).' using errcode = '23514';
   end if;
