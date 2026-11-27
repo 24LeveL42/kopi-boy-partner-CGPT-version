@@ -200,9 +200,10 @@ describe("Kitchen Setup wiring", () => {
   });
 
   it("a save left not live stays on the page with the note, instead of leaving", () => {
-    const stay = saveKitchen.indexOf("if (!uenStep.goLive)");
+    const stay = saveKitchen.indexOf("if (stayNotice)");
     assert.ok(stay > 0 && stay < saveKitchen.indexOf("router.push"));
-    assert.match(saveKitchen, /setNotice\(KITCHEN_UEN_COPY\.savedNotLive\)/);
+    assert.match(saveKitchen, /uenNote: uenStep\.goLive \? null : KITCHEN_UEN_COPY\.savedNotLive/);
+    assert.match(saveKitchen, /setNotice\(stayNotice\)/);
   });
 
   it("shows the UEN error under the box, and the locked note when live", () => {

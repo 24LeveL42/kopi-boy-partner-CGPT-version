@@ -19,7 +19,8 @@ import type { KitchenDefaults } from "@/lib/partner-routing";
 import { KITCHEN_TERMS, MERCHANT_CATEGORIES, isValidPostalCode } from "@/lib/kitchen-profile";
 import { NEW_TAB, PRIVACY_LINK_LABEL, PRIVACY_URL, TERMS_LINK_LABEL, TERMS_URL } from "@/lib/legal-links";
 import { regionLabel, type RegionCode } from "@/lib/ride-regions";
-import { lookupKitchenPostalCode, type KitchenPostalLookup } from "@/lib/kitchen-location-actions";
+import { lookupKitchenPostalCode } from "@/lib/kitchen-location-actions";
+import { kitchenAddressRow, planKitchenLocation, postalLookupError, savedNotice } from "@/lib/kitchen-location-save";
 import { KITCHEN_WELCOME_BANNER } from "@/lib/kitchen-live";
 import {
   assignInsertedIds,
@@ -84,22 +85,6 @@ function draftFromSaved(i: SavedMenuItem, addons: Record<string, SavedGroup[]>):
     photoUploading: false,
     addons: draftsFromSaved(addons[i.id] ?? []),
   };
-}
-
-// Failed postal lookups block saving — a wrong kitchen position gives
-// customers wrong distances, so we'd rather not save one at all.
-function postalLookupError(result: KitchenPostalLookup): string | null {
-  if (result.ok) return null;
-  switch (result.reason) {
-    case "invalid":
-      return "Postal code must be 6 digits (e.g. 310123).";
-    case "not_found":
-      return "We couldn't find that postal code. Please check it.";
-    case "unavailable":
-      return "Postal code lookup is temporarily unavailable. Please try again in a minute.";
-    case "signed_out":
-      return "Your session has expired. Please sign in again.";
-  }
 }
 
 // Supabase errors (Postgrest, Storage, or a raw fetch/network throw) don't
@@ -480,15 +465,21 @@ export function KitchenSetupForm({
       return;
     }
 
-    // Geocode before writing anything, so a failed lookup never leaves a
-    // half-saved kitchen or a wrong position behind.
+    // The location before writing anything (see planKitchenLocation): same
+    // postal code with coordinates saved skips OneMap; OneMap being down
+    // never blocks the save (coordinates are left as they are); a postal
+    // code that's wrong still stops it.
     const postal = postalCode.trim();
-    const location = await lookupKitchenPostalCode(postal);
-    if (!location.ok) {
-      setError(postalLookupError(location));
+    const location = await planKitchenLocation(
+      postal,
+      { postal_code: defaults.postal_code, latitude: defaults.latitude ?? null, longitude: defaults.longitude ?? null },
+      lookupKitchenPostalCode,
+    );
+    if (location.kind === "block") {
+      setError(location.error);
       return;
     }
-    setFoundAddress({ postal, address: location.address });
+    if (location.foundAddress) setFoundAddress({ postal, address: location.foundAddress });
 
     // The UEN first (shops that need one): the database won't let the
     // kitchen go live without it. If it's missing or not accepted, the rest
@@ -523,13 +514,9 @@ export function KitchenSetupForm({
     // the DB derives the public postal sector + rounded coordinates from
     // them (schema sections 28–29). Saved after the kitchen, since it
     // references it.
-    const { error: addressError } = await supabase.from("kitchen_addresses").upsert({
-      kitchen_id: userId,
-      business_address: businessAddress.trim(),
-      postal_code: postal,
-      latitude: location.lat,
-      longitude: location.lng,
-    });
+    // Latitude/longitude only when there's a position; otherwise they're
+    // left out, so whatever is saved stays and nothing is made up.
+    const { error: addressError } = await supabase.from("kitchen_addresses").upsert(kitchenAddressRow(userId, businessAddress, postal, location));
     if (addressError) throw addressError;
 
     // Deals the cook chose to stop rather than leave without their last
@@ -594,10 +581,15 @@ export function KitchenSetupForm({
       return;
     }
 
-    // Saved, but not live because of the UEN: stay here so the owner sees why.
-    if (!uenStep.goLive) {
+    // Saved, but not live because of the UEN, or the location couldn't be
+    // confirmed: stay here so the owner sees why.
+    const stayNotice = savedNotice({
+      uenNote: uenStep.goLive ? null : KITCHEN_UEN_COPY.savedNotLive,
+      locationUnconfirmed: location.unconfirmed,
+    });
+    if (stayNotice) {
       setTouched(false);
-      setNotice(KITCHEN_UEN_COPY.savedNotLive);
+      setNotice(stayNotice);
       return;
     }
 

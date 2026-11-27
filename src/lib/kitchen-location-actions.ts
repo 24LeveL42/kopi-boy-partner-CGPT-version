@@ -1,13 +1,13 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { geocodePostalCode, type GeocodeResult } from "@/lib/geocode";
-
-export type KitchenPostalLookup = GeocodeResult | { ok: false; reason: "signed_out" };
+import { geocodePostalCode } from "@/lib/geocode";
+import type { KitchenPostalLookup } from "@/lib/kitchen-location-save";
 
 /**
  * Geocodes the kitchen's postal code on the server (OneMap). Called by
- * KitchenSetupForm's "Check postal code" button and again on save — the
+ * KitchenSetupForm's "Check postal code" button and on save when the postal
+ * code changed or no coordinates are saved yet — the
  * kitchen's position comes only from this, never from the cook's device GPS.
  */
 export async function lookupKitchenPostalCode(postalCode: string): Promise<KitchenPostalLookup> {
