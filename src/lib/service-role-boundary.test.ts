@@ -119,6 +119,7 @@ describe("service-role client boundary", () => {
     assert.ok(graph("src/lib/claim-route.ts").includes(ADMIN));
     assert.ok(graph("src/app/api/claim/preview/route.ts").includes("src/lib/claim-route.ts"));
     assert.ok(graph("src/app/api/claim/complete/route.ts").includes("src/lib/claim-route.ts"));
+    assert.ok(graph("src/app/api/claim/resume/route.ts").includes("src/lib/claim-route.ts"));
   });
 
   it("only route handlers reach admin.ts; no client component does", () => {

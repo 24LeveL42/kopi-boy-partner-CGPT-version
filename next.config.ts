@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/claim": ["./src/content/legal/*.md"],
   },
+  // HQ's sign-in link page (/resume#<token>): no Referer header ever leaves it.
+  async headers() {
+    return [
+      {
+        source: "/resume",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

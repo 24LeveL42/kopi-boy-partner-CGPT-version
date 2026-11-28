@@ -238,7 +238,7 @@ export function ClaimFlow({ terms, privacy }: { terms: ReactNode; privacy: React
   );
 }
 
-function Frame({ children }: { children: ReactNode }) {
+export function Frame({ children }: { children: ReactNode }) {
   return (
     <main className="kb-page min-h-page">
       <div className="mx-auto w-full max-w-md px-5 pb-16 pt-6">
@@ -251,7 +251,7 @@ function Frame({ children }: { children: ReactNode }) {
   );
 }
 
-function Message({ title, message }: { title: string; message: string }) {
+export function Message({ title, message }: { title: string; message: string }) {
   return (
     <div className="kb-card-pop p-6 text-center" role="status">
       <h1 className="font-display text-2xl font-bold leading-tight" style={{ color: "var(--kb-ink)" }}>{title}</h1>
